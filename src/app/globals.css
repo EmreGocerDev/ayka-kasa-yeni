@@ -1,26 +1,25 @@
-@import "tailwindcss";
+/* Bu 3 satır, Tailwind'in temel, bileşen ve yardımcı stillerini projenize dahil eder. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+/* Koyu ve açık tema renklerinizi ve diğer genel stillerinizi 
+  Tailwind'in standart katmanları içinde tanımlamak en iyi pratiktir.
+*/
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: 255 255 255; /* RGB formatında */
+    --foreground: 23 23 23;   /* RGB formatında */
+  }
+
+  .dark {
+    --background: 10 10 10;
+    --foreground: 237 237 237;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Renkleri artık CSS değişkenleri ve opaklık ile kullanıyoruz */
+  color: rgb(var(--foreground));
+  background: rgb(var(--background));
 }
