@@ -17,7 +17,7 @@ type Transaction = {
   amount: number;
   type: 'GİRDİ' | 'ÇIKTI';
   payment_method: string;
-  transaction_date: string;
+  transaction_date: string; // YYYY-MM-DD formatında string
   created_at: string;
   description: string | null;
   region_id?: string | null;
@@ -35,7 +35,7 @@ export default function AllTransactionsPage() {
   const supabase = createClient();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [userRole, setUserRole] = useState('LEVEL_1');
+  const [userRole, setUserRole] = useState('LEVEL_1'); // Kullanıcı rolü hala çekiliyor
   const [loading, setLoading] = useState(true);
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -63,7 +63,8 @@ export default function AllTransactionsPage() {
     const currentUserRole = profile?.role || 'LEVEL_1';
     setUserRole(currentUserRole);
 
-    if (regions.length === 0) {
+    // Bölge listesini çek (Tüm giriş yapmış kullanıcılar için bir kez çekilir)
+    if (regions.length === 0) { // Sadece bir kez yükle
       const { data: regionsData, error: regionsError } = await supabase.from('regions').select('id, name').order('name');
       if (regionsError) {
         console.error('Bölgeler çekilirken hata oluştu:', regionsError);
@@ -76,7 +77,7 @@ export default function AllTransactionsPage() {
       .select('*, regions(name)')
       .order('transaction_date', { ascending: false });
 
-    // Filtre koşulları rol bağımsız kalacak
+    // FİLTRE KOŞULLARI: ARTIK ROL BAĞIMSIZ, KULLANICI SEÇMİŞSE UYGULANIR
     if (filterStartDate) {
         query = query.gte('transaction_date', filterStartDate);
     }
@@ -120,7 +121,10 @@ export default function AllTransactionsPage() {
 
   const canModify = userRole === 'LEVEL_2' || userRole === 'LEVEL_3';
   // isRegionAndFilterVisible: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN TRUE
-  const isRegionAndFilterVisible = true; // Rol bağımsız kalacak
+  // Çünkü filtreleme ve bölge görünürlüğü artık rol bağımsız.
+  // userRole === 'LEVEL_1' || userRole === 'LEVEL_2' || userRole === 'LEVEL_3' yerine basitçe
+  // kullanıcının oturum açmış olması yeterli. Bu bileşenin zaten oturum açmış kullanıcılar için render edildiğini varsayıyoruz.
+  const isRegionAndFilterVisible = true; // Veya basitçe user != null kontrolü yapabilirsiniz.
 
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
@@ -225,11 +229,8 @@ export default function AllTransactionsPage() {
     );
   }
 
-  const baseColumnCount = 4;
-  const dynamicColumnCount = 
-    (isRegionAndFilterVisible ? 1 : 0) + 
-    (canModify ? 1 : 0);
-  const totalColumnCount = baseColumnCount + dynamicColumnCount;
+  // totalColumnCount hesaplaması isRegionAndFilterVisible true olduğu için basitleşti
+  const totalColumnCount = 5 + (isRegionAndFilterVisible ? 1 : 0) + (canModify ? 1 : 0); // 5 temel sütun + Bölge + Eylemler
 
 
   return (
@@ -253,7 +254,7 @@ export default function AllTransactionsPage() {
         {result?.error && <div className="mb-4 p-3 bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg">{result.error}</div>}
 
         {/* FİLTRELEME ALANI: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN GÖRÜNÜR */}
-        {isRegionAndFilterVisible && ( 
+        {isRegionAndFilterVisible && ( // Condition hala var ama true olarak ayarlandı
           <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-3xl p-4 mb-6 flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[150px]">
               <label htmlFor="filterStartDate" className="block text-sm font-medium text-zinc-300 mb-1">Başlangıç Tarihi</label>
@@ -352,7 +353,7 @@ export default function AllTransactionsPage() {
                   transactions.map(tx => (
                     <React.Fragment key={tx.id}>
                       <tr className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer transition-colors duration-150" onClick={() => setExpandedRow(expandedRow === tx.id ? null : tx.id)}>
-                        <td className="p-4 text-center"><ChevronDown size={18} className={`transition-transform ${expandedRow === tx.id ? 'rotate-180' : ''} text-white fill-white stroke-white`} /></td> {/* İKON RENGİ BEYAZ YAPILDI VE EK EXPLICIT Sınıflar Eklendi */}
+                        <td className="p-4 text-center"><ChevronDown size={18} className={`transition-transform ${expandedRow === tx.id ? 'rotate-180' : ''} text-white`} /></td> {/* İKON RENGİ BEYAZ YAPILDI */}
                         <td className="p-4 text-zinc-200">{formatDate(tx.transaction_date)}</td>
                         <td className="p-4 font-medium text-white">{tx.title}</td>
                         {isRegionAndFilterVisible && ( // BÖLGE SÜTUN İÇERİĞİ: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN GÖRÜNÜR
@@ -408,7 +409,7 @@ export default function AllTransactionsPage() {
   );
 }
 
-// EditTransactionModal bileşeni
+// EditTransactionModal bileşeni (değişiklik yok)
 function EditTransactionModal({ transaction, onClose, onSave, loading }: { transaction: Transaction, onClose: () => void, onSave: (e: React.FormEvent<HTMLFormElement>) => void, loading: boolean }) {
   const [currentTitle, setCurrentTitle] = useState(transaction.title);
   const [currentAmount, setCurrentAmount] = useState(transaction.amount.toString());

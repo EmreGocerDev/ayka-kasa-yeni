@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Users, Map, PlusCircle, ListChecks } from 'lucide-react';
 import LogoutButton from '@/components/LogoutButton';
+// import ThemeToggle from '@/components/ThemeToggle'; // BU İMPORTU KALDIRIN
 
 type Profile = {
   full_name: string;
@@ -29,27 +30,43 @@ export default function Sidebar({ userProfile }: { userProfile: Profile }) {
   ];
 
   return (
+    // Sidebar'ın genel arka planı ve kenarlıkları eski haline getirildi
     <aside className="w-64 flex-col p-6 bg-zinc-900/60 backdrop-blur-xl border-r border-zinc-800 hidden md:flex">
-      <div className="mb-10">
-        <h2 className="text-2xl font-bold text-white">AYKA KASA</h2>
-        <p className="text-zinc-400 text-sm">Yönetim Paneli</p>
+      <div className="mb-10 flex justify-between items-center">
+        <div>
+          {/* Başlık metin rengi eski haline getirildi */}
+          <h2 className="text-2xl font-bold text-white">AYKA KASA</h2>
+          {/* Alt başlık metin rengi eski haline getirildi */}
+          <p className="text-zinc-400 text-sm">Yönetim Paneli</p>
+        </div>
+        {/* ThemeToggle BURADAN KALDIRILDI */}
       </div>
       <nav className="flex-grow">
         <ul>
+          {/* Bölüm başlıkları metin rengi eski haline getirildi */}
           <li className="mt-6 mb-2 px-4 text-xs font-semibold text-zinc-500 uppercase">Panel</li>
           {mainLinks.map(link => (
             <li key={link.href}>
-              <Link href={link.href} className={`flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors ${pathname === link.href ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}>
+              <Link href={link.href} className={`flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors
+                ${pathname === link.href 
+                  ? 'bg-cyan-500/20 text-cyan-300' 
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-white' // Eski normal link stili
+                }`}>
                 <link.icon size={20} />
                 <span>{link.label}</span>
               </Link>
             </li>
           ))}
 
+          {/* Bölüm başlıkları metin rengi eski haline getirildi */}
           <li className="mt-6 mb-2 px-4 text-xs font-semibold text-zinc-500 uppercase">Kasa İşlemleri</li>
           {transactionLinks.map(link => (
             <li key={link.href}>
-              <Link href={link.href} className={`flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors ${pathname.startsWith(link.href) ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}>
+              <Link href={link.href} className={`flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors
+                ${pathname.startsWith(link.href) 
+                  ? 'bg-cyan-500/20 text-cyan-300' 
+                  : 'text-zinc-400 hover:bg-zinc-800 hover:text-white' // Eski normal link stili
+                }`}>
                 <link.icon size={20} />
                 <span>{link.label}</span>
               </Link>
@@ -58,10 +75,15 @@ export default function Sidebar({ userProfile }: { userProfile: Profile }) {
           
           {userProfile?.role === 'LEVEL_3' && (
             <>
+              {/* Bölüm başlıkları metin rengi eski haline getirildi */}
               <li className="mt-6 mb-2 px-4 text-xs font-semibold text-zinc-500 uppercase">Yönetim</li>
               {adminLinks.map(link => (
                 <li key={link.href}>
-                  <Link href={link.href} className={`flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors ${pathname.startsWith(link.href) ? 'bg-cyan-500/20 text-cyan-300' : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}>
+                  <Link href={link.href} className={`flex items-center gap-3 px-4 py-3 mb-2 rounded-lg transition-colors
+                    ${pathname.startsWith(link.href) 
+                      ? 'bg-cyan-500/20 text-cyan-300' 
+                      : 'text-zinc-400 hover:bg-zinc-800 hover:text-white' // Eski normal link stili
+                    }`}>
                     <link.icon size={20} />
                     <span>{link.label}</span>
                   </Link>
@@ -72,6 +94,7 @@ export default function Sidebar({ userProfile }: { userProfile: Profile }) {
         </ul>
       </nav>
       <div className="mt-auto">
+        {/* Kullanıcı bilgisi kutusu arka planı ve metin renkleri eski haline getirildi */}
         <div className="p-4 mb-4 text-center bg-zinc-800/50 rounded-lg">
             <p className="font-bold text-white">{userProfile?.full_name}</p>
             <p className="text-sm text-cyan-400">{userProfile?.role}</p>
