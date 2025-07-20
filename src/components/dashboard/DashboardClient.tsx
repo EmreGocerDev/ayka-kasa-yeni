@@ -6,29 +6,19 @@ import LogoutButton from '@/components/LogoutButton';
 import { ArrowUpRight, ArrowDownLeft, DollarSign, Wallet } from 'lucide-react';
 import { motion } from 'framer-motion'; // Animasyon için
 
-// Yeni eklenen Region tipi (hala gerekli, çünkü regions prop olarak geliyor)
-type Region = {
-  id: string;
-  name: string;
-};
-
 // Veri tiplerini tanımlıyoruz
 type Profile = {
   id: string;
   full_name: string;
   role: string;
-  region_id?: string | null;
 } | null;
 
-// Transaction tipini güncelliyoruz: regions objesi eklendi
 type Transaction = {
   id: string;
   title: string;
   amount: number;
   type: 'GİRDİ' | 'ÇIKTI';
   transaction_date: string;
-  region_id?: string | null; // Bu da hala çekiliyor, ama adı için regions objesini kullanacağız
-  regions?: { name: string | null } | null; // BURAYA İLİŞKİLİ REGIONS OBJESİ EKLENDİ
 };
 
 type Stats = {
@@ -43,18 +33,14 @@ interface DashboardClientProps {
   profile: Profile;
   initialTransactions: Transaction[];
   stats: Stats;
-  regions: Region[]; // regions prop'u hala gerekli
 }
 
-export default function DashboardClient({ user, profile, initialTransactions, stats, regions }: DashboardClientProps) {
+export default function DashboardClient({ user, profile, initialTransactions, stats }: DashboardClientProps) {
+  
   // Para formatlama fonksiyonu
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
   };
-
-  // getRegionName fonksiyonuna artık doğrudan ihtiyaç kalmadı,
-  // çünkü bölge adı doğrudan tx.regions.name üzerinden geliyor.
-  // Ama eğer tx.regions null olursa diye kontrol ekleyeceğiz.
 
   return (
     <div className="p-4 sm:p-8">
@@ -95,25 +81,7 @@ export default function DashboardClient({ user, profile, initialTransactions, st
                   <div className={`w-2 h-10 rounded-full ${tx.type === 'GİRDİ' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                   <div>
                     <p className="font-semibold">{tx.title}</p>
-                    <p className="text-sm text-zinc-400">
-                      {new Date(tx.transaction_date).toLocaleDateString('tr-TR')}
-                      {/* BURAYA ARTIK İŞLEMİN KENDİ BÖLGE ADINI ÇEKİYORUZ */}
-                      {tx.regions?.name && ( // tx.regions var mı ve name'i var mı diye kontrol et
-                        <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-zinc-700 rounded-full text-zinc-300">
-                          {tx.regions.name}
-                        </span>
-                      )}
-                      {!tx.regions?.name && tx.region_id && ( // Eğer region_id var ama name gelmediyse
-                          <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-zinc-700 rounded-full text-zinc-300">
-                            Bilinmeyen Bölge
-                          </span>
-                      )}
-                      {!tx.region_id && ( // Eğer region_id hiç yoksa
-                          <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-zinc-700 rounded-full text-zinc-300">
-                            Bölge Yok
-                          </span>
-                      )}
-                    </p>
+                    <p className="text-sm text-zinc-400">{new Date(tx.transaction_date).toLocaleDateString('tr-TR')}</p>
                   </div>
                 </div>
                 <p className={`font-bold ${tx.type === 'GİRDİ' ? 'text-green-400' : 'text-red-400'}`}>
@@ -142,5 +110,5 @@ const StatCard = ({ title, value, icon, color = 'text-white' }: { title: string,
         <p className={`text-2xl font-bold ${color}`}>{value}</p>
       </div>
     </div>
-  );
-};
+  )
+}

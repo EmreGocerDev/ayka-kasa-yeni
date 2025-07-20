@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
-// Veri tiplerini doğrudan bu dosyada tanımlıyoruz
+// Veri tipleri (değişiklik yok)
 type Transaction = {
   id: string;
   title: string;
@@ -20,11 +20,11 @@ type Transaction = {
   transaction_date: string; // YYYY-MM-DD formatında string
   created_at: string;
   description: string | null;
-  region_id?: string | null; // transactions tablosunda region_id varsa
-  regions?: { name: string | null } | null; // regions(name) çekildiğinde gelecek obje
+  region_id?: string | null;
+  regions?: { name: string | null } | null;
 };
 
-// Bölge tipi
+// Bölge tipi (değişiklik yok)
 type Region = {
   id: string;
   name: string;
@@ -35,7 +35,7 @@ export default function AllTransactionsPage() {
   const supabase = createClient();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [userRole, setUserRole] = useState('LEVEL_1');
+  const [userRole, setUserRole] = useState('LEVEL_1'); // Kullanıcı rolü hala çekiliyor
   const [loading, setLoading] = useState(true);
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -46,7 +46,8 @@ export default function AllTransactionsPage() {
 
   const [exporting, setExporting] = useState(false);
 
-  const [filterDate, setFilterDate] = useState<string>('');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
   const [filterRegion, setFilterRegion] = useState<string>('');
   const [filterType, setFilterType] = useState<'GİRDİ' | 'ÇIKTI' | ''>('');
   const [regions, setRegions] = useState<Region[]>([]);
@@ -62,7 +63,8 @@ export default function AllTransactionsPage() {
     const currentUserRole = profile?.role || 'LEVEL_1';
     setUserRole(currentUserRole);
 
-    if (currentUserRole === 'LEVEL_3' && regions.length === 0) {
+    // Bölge listesini çek (Tüm giriş yapmış kullanıcılar için bir kez çekilir)
+    if (regions.length === 0) { // Sadece bir kez yükle
       const { data: regionsData, error: regionsError } = await supabase.from('regions').select('id, name').order('name');
       if (regionsError) {
         console.error('Bölgeler çekilirken hata oluştu:', regionsError);
@@ -75,16 +77,18 @@ export default function AllTransactionsPage() {
       .select('*, regions(name)')
       .order('transaction_date', { ascending: false });
 
-    if (currentUserRole === 'LEVEL_3') {
-        if (filterDate) {
-            query = query.eq('transaction_date', filterDate);
-        }
-        if (filterRegion) {
-            query = query.eq('region_id', filterRegion);
-        }
-        if (filterType) {
-            query = query.eq('type', filterType);
-        }
+    // FİLTRE KOŞULLARI: ARTIK ROL BAĞIMSIZ, KULLANICI SEÇMİŞSE UYGULANIR
+    if (filterStartDate) {
+        query = query.gte('transaction_date', filterStartDate);
+    }
+    if (filterEndDate) {
+        query = query.lte('transaction_date', filterEndDate);
+    }
+    if (filterRegion) {
+        query = query.eq('region_id', filterRegion);
+    }
+    if (filterType) {
+        query = query.eq('type', filterType);
     }
 
     const { data: transactionsData, error } = await query;
@@ -97,7 +101,7 @@ export default function AllTransactionsPage() {
     }
 
     setLoading(false);
-  }, [router, supabase, filterDate, filterRegion, filterType, regions.length]);
+  }, [router, supabase, filterStartDate, filterEndDate, filterRegion, filterType, regions.length]);
 
   useEffect(() => {
     fetchData();
@@ -116,14 +120,20 @@ export default function AllTransactionsPage() {
   }, [fetchData, supabase]);
 
   const canModify = userRole === 'LEVEL_2' || userRole === 'LEVEL_3';
-  const isRegionAndFilterVisible = userRole === 'LEVEL_3';
+  // isRegionAndFilterVisible: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN TRUE
+  // Çünkü filtreleme ve bölge görünürlüğü artık rol bağımsız.
+  // userRole === 'LEVEL_1' || userRole === 'LEVEL_2' || userRole === 'LEVEL_3' yerine basitçe
+  // kullanıcının oturum açmış olması yeterli. Bu bileşenin zaten oturum açmış kullanıcılar için render edildiğini varsayıyoruz.
+  const isRegionAndFilterVisible = true; // Veya basitçe user != null kontrolü yapabilirsiniz.
+
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric' });
   const formatDateTime = (dateString: string) => new Date(dateString).toLocaleString('tr-TR');
 
   const clearFilters = () => {
-    setFilterDate('');
+    setFilterStartDate('');
+    setFilterEndDate('');
     setFilterRegion('');
     setFilterType('');
     setResult(null);
@@ -162,7 +172,6 @@ export default function AllTransactionsPage() {
     }
   };
 
-  // Düzenleme fonksiyonu (artık içeride tanımlı)
   const handleUpdate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!editingTransaction) return;
@@ -193,7 +202,6 @@ export default function AllTransactionsPage() {
     setActionLoading(false);
   };
 
-  // Silme onay fonksiyonu (artık içeride tanımlı)
   const handleDeleteConfirm = async () => {
     if (!deletingTransaction) return;
     setActionLoading(true);
@@ -212,11 +220,17 @@ export default function AllTransactionsPage() {
     setActionLoading(false);
   };
 
-  const baseColumnCount = 4;
-  const dynamicColumnCount = 
-    (isRegionAndFilterVisible ? 1 : 0) + 
-    (canModify ? 1 : 0);
-  const totalColumnCount = baseColumnCount + dynamicColumnCount;
+
+  if (loading && transactions.length === 0) {
+    return (
+      <div className="flex items-center justify-center w-full h-full p-8">
+        <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  // totalColumnCount hesaplaması isRegionAndFilterVisible true olduğu için basitleşti
+  const totalColumnCount = 5 + (isRegionAndFilterVisible ? 1 : 0) + (canModify ? 1 : 0); // 5 temel sütun + Bölge + Eylemler
 
 
   return (
@@ -239,15 +253,26 @@ export default function AllTransactionsPage() {
         {result?.success && <div className="mb-4 p-3 bg-green-500/20 text-green-300 border border-green-500/30 rounded-lg">{result.success}</div>}
         {result?.error && <div className="mb-4 p-3 bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg">{result.error}</div>}
 
-        {isRegionAndFilterVisible && (
+        {/* FİLTRELEME ALANI: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN GÖRÜNÜR */}
+        {isRegionAndFilterVisible && ( // Condition hala var ama true olarak ayarlandı
           <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-3xl p-4 mb-6 flex flex-wrap gap-4 items-end">
             <div className="flex-1 min-w-[150px]">
-              <label htmlFor="filterDate" className="block text-sm font-medium text-zinc-300 mb-1">Tarihe Göre Filtrele</label>
+              <label htmlFor="filterStartDate" className="block text-sm font-medium text-zinc-300 mb-1">Başlangıç Tarihi</label>
               <input
                 type="date"
-                id="filterDate"
-                value={filterDate}
-                onChange={(e) => setFilterDate(e.target.value)}
+                id="filterStartDate"
+                value={filterStartDate}
+                onChange={(e) => setFilterStartDate(e.target.value)}
+                className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+              />
+            </div>
+            <div className="flex-1 min-w-[150px]">
+              <label htmlFor="filterEndDate" className="block text-sm font-medium text-zinc-300 mb-1">Bitiş Tarihi</label>
+              <input
+                type="date"
+                id="filterEndDate"
+                value={filterEndDate}
+                onChange={(e) => setFilterEndDate(e.target.value)}
                 className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
               />
             </div>
@@ -289,7 +314,7 @@ export default function AllTransactionsPage() {
               >
                 <Filter size={18} /> Filtrele
               </button>
-              {(filterDate || filterRegion || filterType) && (
+              {(filterStartDate || filterEndDate || filterRegion || filterType) && (
                 <button
                   onClick={clearFilters}
                   className="py-2 px-4 flex items-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 font-bold rounded-lg transition-colors duration-200"
@@ -309,7 +334,7 @@ export default function AllTransactionsPage() {
                   <th className="p-4 w-12 text-zinc-400"></th>
                   <th className="p-4 text-sm font-semibold text-zinc-400">İşlem Tarihi</th>
                   <th className="p-4 text-sm font-semibold text-zinc-400">Başlık</th>
-                  {isRegionAndFilterVisible && (
+                  {isRegionAndFilterVisible && ( // BÖLGE SÜTUN BAŞLIĞI: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN GÖRÜNÜR
                     <th className="p-4 text-sm font-semibold text-zinc-400">Bölge</th>
                   )}
                   <th className="p-4 text-sm font-semibold text-zinc-400 text-center">Tip</th>
@@ -328,10 +353,10 @@ export default function AllTransactionsPage() {
                   transactions.map(tx => (
                     <React.Fragment key={tx.id}>
                       <tr className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer transition-colors duration-150" onClick={() => setExpandedRow(expandedRow === tx.id ? null : tx.id)}>
-                        <td className="p-4 text-center"><ChevronDown size={18} className={`transition-transform ${expandedRow === tx.id ? 'rotate-180' : ''} text-zinc-400`} /></td>
+                        <td className="p-4 text-center"><ChevronDown size={18} className={`transition-transform ${expandedRow === tx.id ? 'rotate-180' : ''} text-white`} /></td> {/* İKON RENGİ BEYAZ YAPILDI */}
                         <td className="p-4 text-zinc-200">{formatDate(tx.transaction_date)}</td>
                         <td className="p-4 font-medium text-white">{tx.title}</td>
-                        {isRegionAndFilterVisible && (
+                        {isRegionAndFilterVisible && ( // BÖLGE SÜTUN İÇERİĞİ: ARTIK TÜM GİRİŞ YAPMIŞ KULLANICILAR İÇİN GÖRÜNÜR
                             <td className="p-4 text-zinc-400">
                                 {tx.regions?.name || 'Bilinmiyor'}
                             </td>
@@ -384,9 +409,8 @@ export default function AllTransactionsPage() {
   );
 }
 
-// EditTransactionModal bileşeni
+// EditTransactionModal bileşeni (değişiklik yok)
 function EditTransactionModal({ transaction, onClose, onSave, loading }: { transaction: Transaction, onClose: () => void, onSave: (e: React.FormEvent<HTMLFormElement>) => void, loading: boolean }) {
-  // Input varsayılan değerleri için state kullanabiliriz
   const [currentTitle, setCurrentTitle] = useState(transaction.title);
   const [currentAmount, setCurrentAmount] = useState(transaction.amount.toString());
   const [currentType, setCurrentType] = useState(transaction.type);
@@ -394,7 +418,6 @@ function EditTransactionModal({ transaction, onClose, onSave, loading }: { trans
   const [currentTransactionDate, setCurrentTransactionDate] = useState(transaction.transaction_date);
   const [currentDescription, setCurrentDescription] = useState(transaction.description || '');
 
-  // Eğer modal açıldığında işlem değişirse state'leri güncelle
   useEffect(() => {
     setCurrentTitle(transaction.title);
     setCurrentAmount(transaction.amount.toString());
