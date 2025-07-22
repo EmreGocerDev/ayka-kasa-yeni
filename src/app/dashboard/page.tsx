@@ -1,4 +1,5 @@
-'use client'; 
+// src/app/dashboard/page.tsx
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -6,29 +7,37 @@ import { createClient } from '@/utils/supabase/client';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import { User } from '@supabase/supabase-js';
 
-// Define the Region type
-type Region = {
+export type Region = {
   id: string;
   name: string;
 };
 
-// Define the Transaction type, ensuring it can include regions data if fetched
-type Transaction = {
+export type Transaction = {
   id: string;
   title: string;
   amount: number;
   type: 'GİRDİ' | 'ÇIKTI';
   transaction_date: string;
   region_id?: string | null;
-  regions?: { name: string | null } | null; // For joined region data
-  // Add other properties if your transaction table has them (e.g., payment_method, created_at, description)
+  payment_method?: string | null;
+  regions?: { name: string | null } | null;
+};
+
+export type RegionalStats = {
+  [key: string]: {
+    name: string;
+    totalIncome: number;
+    cashExpenses: number;
+    creditCardExpenseTotal: number;
+    cashBalance: number;
+  }
 };
 
 export default function DashboardPage() {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any>(null); // Consider making `data` type more specific
+  const [data, setData] = useState<any>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -37,41 +46,60 @@ export default function DashboardPage() {
         router.push('/login');
         return;
       }
+      const { data: profile } = await supabase.from('profiles').select('*, region_id, role').eq('id', user.id).single();
       
-      const { data: profile } = await supabase.from('profiles').select('*, region_id').eq('id', user.id).single();
+      const { data: transactionsData } = await supabase.from('transactions').select('*, regions(name)').order('transaction_date', { ascending: false }).limit(5);
+      const { data: creditCardTransactionsData } = await supabase.from('transactions').select('*, regions(name)').eq('payment_method', 'KREDI_KARTI').order('transaction_date', { ascending: false }).limit(5);
       
-      // Fetch transactions, including the joined region name
-      const { data: transactionsData, error: transactionsError } = await supabase
-        .from('transactions')
-        .select('*, regions(name)') // Fetch transactions and their associated region names
-        .order('transaction_date', { ascending: false })
-        .limit(5);
-
-      if (transactionsError) {
-        console.error('İşlemler çekilirken hata oluştu:', transactionsError);
-        // Handle error, e.g., display a message to the user
+      // GÜNCELLENDİ: Level 1 kullanıcısı için verileri kendi bölgesine göre filtrele
+      let allTransactionsQuery = supabase.from('transactions').select('amount, type, payment_method, region_id');
+      if (profile && profile.role === 'LEVEL_1' && profile.region_id) {
+        allTransactionsQuery = allTransactionsQuery.eq('region_id', profile.region_id);
       }
-      
-      // Fetch all transactions for total income/expense calculation
-      const { data: allTransactions } = await supabase.from('transactions').select('amount, type');
-      
-      // Fetch all regions for potential use in DashboardClient (e.g., filtering, display)
-      const { data: regionsData, error: regionsError } = await supabase.from('regions').select('*');
+      const { data: allTransactions } = await allTransactionsQuery;
 
-      if (regionsError) {
-        console.error('Bölgeler çekilirken hata oluştu:', regionsError);
-        // Handle error, e.g., display a message to the user
-      }
+      const { data: regionsData } = await supabase.from('regions').select('*');
 
       const totalIncome = allTransactions?.filter(t => t.type === 'GİRDİ').reduce((sum, t) => sum + t.amount, 0) || 0;
       const totalExpense = allTransactions?.filter(t => t.type === 'ÇIKTI').reduce((sum, t) => sum + t.amount, 0) || 0;
+      const creditCardExpenseTotal = allTransactions?.filter(t => t.type === 'ÇIKTI' && t.payment_method === 'KREDI_KARTI').reduce((sum, t) => sum + t.amount, 0) || 0;
+      const cashExpenses = totalExpense - creditCardExpenseTotal;
+      const cashBalance = totalIncome - cashExpenses;
+
+      const regionalStats: RegionalStats = {};
+      if (profile && (profile.role === 'LEVEL_2' || profile.role === 'LEVEL_3') && regionsData && allTransactions) {
+        regionsData.forEach(region => {
+          regionalStats[region.id] = { name: region.name, totalIncome: 0, cashExpenses: 0, creditCardExpenseTotal: 0, cashBalance: 0 };
+        });
+
+        allTransactions.forEach(tx => {
+          const regionId = tx.region_id;
+          if (regionId && regionalStats[regionId]) {
+            if (tx.type === 'GİRDİ') {
+              regionalStats[regionId].totalIncome += tx.amount;
+            } else {
+              if (tx.payment_method === 'KREDI_KARTI') {
+                regionalStats[regionId].creditCardExpenseTotal += tx.amount;
+              } else {
+                regionalStats[regionId].cashExpenses += tx.amount;
+              }
+            }
+          }
+        });
+
+        Object.keys(regionalStats).forEach(regionId => {
+          regionalStats[regionId].cashBalance = regionalStats[regionId].totalIncome - regionalStats[regionId].cashExpenses;
+        });
+      }
 
       setData({
         user,
         profile,
-        transactions: transactionsData || [], // Use the fetched transactionsData
-        stats: { totalIncome, totalExpense, balance: totalIncome - totalExpense },
-        regions: regionsData || [] // Pass regions data
+        transactions: transactionsData || [],
+        creditCardTransactions: creditCardTransactionsData || [],
+        stats: { totalIncome, totalExpense, cashBalance, creditCardExpenseTotal, cashExpenses },
+        regions: regionsData || [],
+        regionalStats,
       });
       setLoading(false);
     };
@@ -91,8 +119,10 @@ export default function DashboardPage() {
       user={data.user!}
       profile={data.profile}
       initialTransactions={data.transactions}
+      creditCardTransactions={data.creditCardTransactions}
       stats={data.stats}
-      regions={data.regions} // Pass the regions prop to DashboardClient
+      regions={data.regions}
+      regionalStats={data.regionalStats}
     />
   );
 }
