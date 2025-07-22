@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import { User } from '@supabase/supabase-js';
 
+// Tipleri dışarı aktararak diğer dosyalarda da kullanılabilir hale getiriyoruz
 export type Region = {
   id: string;
   name: string;
@@ -23,6 +24,7 @@ export type Transaction = {
   regions?: { name: string | null } | null;
 };
 
+// Bölgesel ve genel istatistikler için tip tanımı
 export type RegionalStats = {
   [key: string]: {
     name: string;
@@ -51,7 +53,6 @@ export default function DashboardPage() {
       const { data: transactionsData } = await supabase.from('transactions').select('*, regions(name)').order('transaction_date', { ascending: false }).limit(5);
       const { data: creditCardTransactionsData } = await supabase.from('transactions').select('*, regions(name)').eq('payment_method', 'KREDI_KARTI').order('transaction_date', { ascending: false }).limit(5);
       
-      // GÜNCELLENDİ: Level 1 kullanıcısı için verileri kendi bölgesine göre filtrele
       let allTransactionsQuery = supabase.from('transactions').select('amount, type, payment_method, region_id');
       if (profile && profile.role === 'LEVEL_1' && profile.region_id) {
         allTransactionsQuery = allTransactionsQuery.eq('region_id', profile.region_id);
@@ -99,7 +100,7 @@ export default function DashboardPage() {
         creditCardTransactions: creditCardTransactionsData || [],
         stats: { totalIncome, totalExpense, cashBalance, creditCardExpenseTotal, cashExpenses },
         regions: regionsData || [],
-        regionalStats,
+        regionalStats, // Bu veri artık burada oluşturuluyor
       });
       setLoading(false);
     };
@@ -119,10 +120,10 @@ export default function DashboardPage() {
       user={data.user!}
       profile={data.profile}
       initialTransactions={data.transactions}
-      creditCardTransactions={data.creditCardTransactions}
+      creditCardTransactions={data.creditCardTransactions} // Prop gönderiliyor
       stats={data.stats}
       regions={data.regions}
-      regionalStats={data.regionalStats}
+      regionalStats={data.regionalStats} // Prop gönderiliyor
     />
   );
 }
