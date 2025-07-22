@@ -1,4 +1,4 @@
-// src/app/dashboard/page.tsx
+// DOĞRU DOSYA YOLU: src/app/dashboard/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -7,7 +7,6 @@ import { createClient } from '@/utils/supabase/client';
 import DashboardClient from '@/components/dashboard/DashboardClient';
 import { User } from '@supabase/supabase-js';
 
-// Tipleri dışarı aktararak diğer dosyalarda da kullanılabilir hale getiriyoruz
 export type Region = {
   id: string;
   name: string;
@@ -24,7 +23,6 @@ export type Transaction = {
   regions?: { name: string | null } | null;
 };
 
-// Bölgesel ve genel istatistikler için tip tanımı
 export type RegionalStats = {
   [key: string]: {
     name: string;
