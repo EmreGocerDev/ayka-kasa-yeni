@@ -100,7 +100,7 @@ export default function DashboardPage() {
         creditCardTransactions: creditCardTransactionsData || [],
         stats: { totalIncome, totalExpense, cashBalance, creditCardExpenseTotal, cashExpenses },
         regions: regionsData || [],
-        regionalStats, // Bu veri artık burada oluşturuluyor
+        regionalStats,
       });
       setLoading(false);
     };
@@ -120,10 +120,10 @@ export default function DashboardPage() {
       user={data.user!}
       profile={data.profile}
       initialTransactions={data.transactions}
-      creditCardTransactions={data.creditCardTransactions} // Prop gönderiliyor
+      creditCardTransactions={data.creditCardTransactions}
       stats={data.stats}
       regions={data.regions}
-      regionalStats={data.regionalStats} // Prop gönderiliyor
+      regionalStats={data.regionalStats}
     />
   );
 }
