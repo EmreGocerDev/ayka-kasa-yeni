@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Edit, Trash2, ChevronDown, MessageSquare, Filter, X, FileText, TrendingUp, TrendingDown, Wallet, Landmark, Receipt, Eye, MapPin, User } from 'lucide-react';
+import { Edit, Trash2, ChevronDown, MessageSquare, Filter, X, FileText, TrendingUp, TrendingDown, Wallet, Landmark, Receipt, Eye, MapPin, User, CreditCard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 
@@ -65,11 +65,27 @@ export default function AllTransactionsPage() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
 
+  // MEVCUT SUMMARY BLOĞUNU BUNUNLA DEĞİŞTİRİN
+
   const summary = useMemo(() => {
     const totalIncome = transactions.filter(tx => tx.type === 'GİRDİ').reduce((acc, tx) => acc + tx.amount, 0);
-    const totalExpense = transactions.filter(tx => tx.type === 'ÇIKTI').reduce((acc, tx) => acc + tx.amount, 0);
-    const balance = totalIncome - totalExpense;
-    return { totalIncome, totalExpense, balance };
+    
+    // Giderleri ödeme tipine göre ayır
+    const cashExpenses = transactions
+      .filter(tx => tx.type === 'ÇIKTI' && tx.payment_method !== 'KREDI_KARTI')
+      .reduce((acc, tx) => acc + tx.amount, 0);
+      
+    const creditCardExpenses = transactions
+      .filter(tx => tx.type === 'ÇIKTI' && tx.payment_method === 'KREDI_KARTI')
+      .reduce((acc, tx) => acc + tx.amount, 0);
+      
+    // Toplam gider bu ikisinin toplamıdır
+    const totalExpense = cashExpenses + creditCardExpenses;
+    
+    // Bakiye, sadece nakit hareketlerine göre hesaplanır
+    const balance = totalIncome - cashExpenses;
+
+    return { totalIncome, totalExpense, balance, cashExpenses, creditCardExpenses };
   }, [transactions]);
 
   const fetchData = useCallback(async () => {
@@ -291,10 +307,37 @@ export default function AllTransactionsPage() {
             <div className={`flex gap-2 col-span-1 sm:col-span-2 lg:col-span-4 ${isAdmin ? 'lg:col-start-3' : ''}`}><button onClick={fetchData} className="w-full py-2 px-4 flex items-center justify-center gap-2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold rounded-lg hover:scale-105 transition-transform duration-200 disabled:opacity-50" disabled={loading}><Filter size={18} /> Filtrele</button>{(filterStartDate || filterEndDate || filterRegion || filterType || filterPaymentMethod || filterInvoiceType || filterExpenseRegion || filterUser) && (<button onClick={clearFilters} className="w-full py-2 px-4 flex items-center justify-center gap-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 font-bold rounded-lg transition-colors duration-200"><X size={18} /> Temizle</button>)}</div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-green-500/10 rounded-full border border-green-500/20"><TrendingUp size={24} className="text-green-400" /></div><div><p className="text-sm text-zinc-400">Filtrelenen Gelir</p><p className="text-2xl font-bold text-green-400">{formatCurrency(summary.totalIncome)}</p></div></div>
-            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-red-500/10 rounded-full border border-red-500/20"><TrendingDown size={24} className="text-red-400" /></div><div><p className="text-sm text-zinc-400">Filtrelenen Gider</p><p className="text-2xl font-bold text-red-400">{formatCurrency(summary.totalExpense)}</p></div></div>
-            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-cyan-500/10 rounded-full border border-cyan-500/20"><Wallet size={24} className="text-cyan-400" /></div><div><p className="text-sm text-zinc-400">Net Bakiye</p><p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-white' : 'text-red-400'}`}>{formatCurrency(summary.balance)}</p></div></div>
+        {/* MEVCUT 3'LÜ KART GRUBUNU BUNUNLA DEĞİŞTİRİN */}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
+                <div className="p-3 bg-cyan-500/10 rounded-full border border-cyan-500/20"><Wallet size={24} className="text-cyan-400" /></div>
+                <div>
+                    <p className="text-sm text-zinc-400">Filtrelenen Nakit Bakiye</p>
+                    <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-white' : 'text-red-400'}`}>{formatCurrency(summary.balance)}</p>
+                </div>
+            </div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
+                <div className="p-3 bg-green-500/10 rounded-full border border-green-500/20"><TrendingUp size={24} className="text-green-400" /></div>
+                <div>
+                    <p className="text-sm text-zinc-400">Filtrelenen Gelir</p>
+                    <p className="text-2xl font-bold text-green-400">{formatCurrency(summary.totalIncome)}</p>
+                </div>
+            </div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
+                <div className="p-3 bg-red-500/10 rounded-full border border-red-500/20"><TrendingDown size={24} className="text-red-400" /></div>
+                <div>
+                    <p className="text-sm text-zinc-400">Filtrelenen Nakit Gider</p>
+                    <p className="text-2xl font-bold text-red-400">{formatCurrency(summary.cashExpenses)}</p>
+                </div>
+            </div>
+             <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
+                <div className="p-3 bg-orange-500/10 rounded-full border border-orange-500/20"><CreditCard size={24} className="text-orange-400" /></div>
+                <div>
+                    <p className="text-sm text-zinc-400">Filtrelenen KK Gideri</p>
+                    <p className="text-2xl font-bold text-orange-400">{formatCurrency(summary.creditCardExpenses)}</p>
+                </div>
+            </div>
         </div>
 
         <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl">
