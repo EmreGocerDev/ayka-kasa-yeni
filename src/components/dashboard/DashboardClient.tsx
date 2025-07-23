@@ -82,26 +82,7 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
 
     return (
         <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6">
-            <div className="flex items-center gap-3 mb-6">
-                <BarChart2 className="text-cyan-400" size={24} />
-                <h2 className="text-xl font-bold text-white">Bölgesel Performans Grafiği</h2>
-            </div>
-            <div style={{ width: '100%', height: 300 }}>
-                <ResponsiveContainer>
-                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                        <XAxis dataKey="name" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} />
-                        <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `${formatCurrency(value as number)}`} />
-                        <Tooltip contentStyle={{ backgroundColor: '#18181b', border: '1px solid #3f3f46', borderRadius: '0.5rem' }} labelStyle={{ color: '#ffffff' }} formatter={(value: number) => formatCurrency(value)} />
-                        <Legend wrapperStyle={{ fontSize: '14px' }} />
-                        <Bar dataKey="Gelir" radius={[4, 4, 0, 0]}>
-                            {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill="#4ade80" />)}
-                        </Bar>
-                        <Bar dataKey="Gider" radius={[4, 4, 0, 0]}>
-                             {chartData.map((entry, index) => <Cell key={`cell-${index}`} fill="#f87171" />)}
-                        </Bar>
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
+            
             <div className="mt-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.values(regionalStats).map(region => (
                     <div key={region.name} className="bg-zinc-800/50 p-4 rounded-lg border border-zinc-700">

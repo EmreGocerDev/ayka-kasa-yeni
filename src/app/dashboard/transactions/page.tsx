@@ -65,6 +65,9 @@ export default function AllTransactionsPage() {
   const [regions, setRegions] = useState<Region[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
 
+  const [sortBy, setSortBy] = useState<'transaction_date' | 'created_at'>('transaction_date');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+
   // MEVCUT SUMMARY BLOĞUNU BUNUNLA DEĞİŞTİRİN
 
   const summary = useMemo(() => {
@@ -87,6 +90,8 @@ export default function AllTransactionsPage() {
 
     return { totalIncome, totalExpense, balance, cashExpenses, creditCardExpenses };
   }, [transactions]);
+
+  // MEVCUT fetchData FONKSİYONUNU BUNUNLA DEĞİŞTİRİN
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -112,12 +117,15 @@ export default function AllTransactionsPage() {
         setUsers(usersData || []);
     }
 
-    let query = supabase.from('transactions').select('*, regions(name)').order('transaction_date', { ascending: false });
+    // GÜNCELLENDİ: Sorgu artık dinamik sıralama seçeneklerini kullanıyor
+    let query = supabase.from('transactions').select('*, regions(name)')
+      .order(sortBy, { ascending: sortOrder === 'asc' });
 
     if (currentUserRole === 'LEVEL_1' && profile?.region_id) {
         query = query.eq('region_id', profile.region_id);
     }
     
+    // ... (Filtreleme mantığı aynı kalıyor)
     if (filterStartDate) query = query.gte('transaction_date', filterStartDate);
     if (filterEndDate) query = query.lte('transaction_date', filterEndDate);
     if (filterType) query = query.eq('type', filterType);
@@ -146,8 +154,7 @@ export default function AllTransactionsPage() {
       setTransactions(transactionsData || []);
     }
     setLoading(false);
-  }, [router, supabase, filterStartDate, filterEndDate, filterRegion, filterType, regions.length, users.length, filterPaymentMethod, filterInvoiceType, filterExpenseRegion, filterUser]);
-  
+  }, [router, supabase, filterStartDate, filterEndDate, filterRegion, filterType, regions.length, users.length, filterPaymentMethod, filterInvoiceType, filterExpenseRegion, filterUser, sortBy, sortOrder]); // Bağımlılıklara sortBy ve sortOrder eklendi 
   useEffect(() => {
     fetchData();
     const channel = supabase.channel('transactions_changes').on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => fetchData()).subscribe();
@@ -309,35 +316,36 @@ export default function AllTransactionsPage() {
 
         {/* MEVCUT 3'LÜ KART GRUBUNU BUNUNLA DEĞİŞTİRİN */}
 
+       {/* ÖZET KARTLARINI (grid... olan div) VE ALTINDAKİ İŞLEM LİSTESİ DİV'İNİ BUNUNLA DEĞİŞTİRİN */}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
-                <div className="p-3 bg-cyan-500/10 rounded-full border border-cyan-500/20"><Wallet size={24} className="text-cyan-400" /></div>
-                <div>
-                    <p className="text-sm text-zinc-400">Filtrelenen Nakit Bakiye</p>
-                    <p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-white' : 'text-red-400'}`}>{formatCurrency(summary.balance)}</p>
-                </div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-cyan-500/10 rounded-full border border-cyan-500/20"><Wallet size={24} className="text-cyan-400" /></div><div><p className="text-sm text-zinc-400">Filtrelenen Nakit Bakiye</p><p className={`text-2xl font-bold ${summary.balance >= 0 ? 'text-white' : 'text-red-400'}`}>{formatCurrency(summary.balance)}</p></div></div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-green-500/10 rounded-full border border-green-500/20"><TrendingUp size={24} className="text-green-400" /></div><div><p className="text-sm text-zinc-400">Filtrelenen Gelir</p><p className="text-2xl font-bold text-green-400">{formatCurrency(summary.totalIncome)}</p></div></div>
+            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-red-500/10 rounded-full border border-red-500/20"><TrendingDown size={24} className="text-red-400" /></div><div><p className="text-sm text-zinc-400">Filtrelenen Nakit Gider</p><p className="text-2xl font-bold text-red-400">{formatCurrency(summary.cashExpenses)}</p></div></div>
+             <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4"><div className="p-3 bg-orange-500/10 rounded-full border border-orange-500/20"><CreditCard size={24} className="text-orange-400" /></div><div><p className="text-sm text-zinc-400">Filtrelenen KK Gideri</p><p className="text-2xl font-bold text-orange-400">{formatCurrency(summary.creditCardExpenses)}</p></div></div>
+        </div>
+
+        {/* YENİ: Sıralama menüleri buraya eklendi */}
+       <div className="flex items-center justify-start gap-4 mb-4">
+            <div className='flex items-center gap-2'>
+                <label htmlFor="sortBy" className="text-sm text-zinc-400">Sırala:</label>
+                <select id="sortBy" value={sortBy} onChange={(e) => setSortBy(e.target.value as any)} className="py-1 px-2 text-sm bg-zinc-800 text-white border border-zinc-700 rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500">
+                    <option value="transaction_date">İşlem Tarihi</option>
+                    <option value="created_at">Kayıt Tarihi</option>
+                </select>
             </div>
-            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
-                <div className="p-3 bg-green-500/10 rounded-full border border-green-500/20"><TrendingUp size={24} className="text-green-400" /></div>
-                <div>
-                    <p className="text-sm text-zinc-400">Filtrelenen Gelir</p>
-                    <p className="text-2xl font-bold text-green-400">{formatCurrency(summary.totalIncome)}</p>
-                </div>
+            <div className='flex items-center gap-2'>
+                <label htmlFor="sortOrder" className="text-sm text-zinc-400">Sıra:</label>
+                <select id="sortOrder" value={sortOrder} onChange={(e) => setSortOrder(e.target.value as any)} className="py-1 px-2 text-sm bg-zinc-800 text-white border border-zinc-700 rounded-md focus:outline-none focus:ring-1 focus:ring-cyan-500">
+                    <option value="desc">Yeniye Göre</option>
+                    <option value="asc">Eskiye Göre</option>
+                </select>
             </div>
-            <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
-                <div className="p-3 bg-red-500/10 rounded-full border border-red-500/20"><TrendingDown size={24} className="text-red-400" /></div>
-                <div>
-                    <p className="text-sm text-zinc-400">Filtrelenen Nakit Gider</p>
-                    <p className="text-2xl font-bold text-red-400">{formatCurrency(summary.cashExpenses)}</p>
-                </div>
-            </div>
-             <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-5 flex items-center gap-4">
-                <div className="p-3 bg-orange-500/10 rounded-full border border-orange-500/20"><CreditCard size={24} className="text-orange-400" /></div>
-                <div>
-                    <p className="text-sm text-zinc-400">Filtrelenen KK Gideri</p>
-                    <p className="text-2xl font-bold text-orange-400">{formatCurrency(summary.creditCardExpenses)}</p>
-                </div>
-            </div>
+        </div>
+
+        {/* İşlem listesi */}
+        <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl">
+            {/* Masaüstü ve mobil görünümleriniz buraya gelecek (önceki cevaptaki gibi) */}
         </div>
 
         <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl">
