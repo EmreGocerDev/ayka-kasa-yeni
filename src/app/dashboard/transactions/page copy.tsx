@@ -309,95 +309,55 @@ export default function AllTransactionsPage() {
                     {canModify && <th className="p-4 text-sm font-semibold text-zinc-400 text-center">Eylemler</th>}
                 </tr>
               </thead>
-              {/* <tbody> ETİKETİNİN TAMAMINI BUNUNLA DEĞİŞTİRİN */}
+              <tbody>
+                {transactions.length === 0 ? (
+                  <tr><td colSpan={isAdmin ? (canModify ? 5 : 4) : 3} className="text-center text-zinc-500 py-12">{loading ? 'İşlemler yükleniyor...' : 'Görüntülenecek işlem bulunmuyor.'}</td></tr>
+                ) : (
+                  transactions.map(tx => {
+                    const transactionUser = users.find(u => u.id === tx.user_id);
+                    const isExpanded = expandedRow === tx.id;
+                    return (
+                      <React.Fragment key={tx.id}>
+                        <tr className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                          <td className="p-4 text-center hidden md:table-cell cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}><ChevronDown size={18} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
+                          <td className="p-4 cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
+                            <div className="font-bold text-white">{tx.title}</div>
+                            <div className="text-sm text-zinc-400">{formatDate(tx.transaction_date)}</div>
+                          </td>
+                          {isAdmin && <td className="p-4 text-zinc-400 hidden lg:table-cell">{tx.regions?.name || 'Bilinmiyor'}</td>}
+                          <td className="p-4 text-right cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
+                            <div className={`font-bold text-lg ${tx.type === 'GİRDİ' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'GİRDİ' ? '+' : '-'}{formatCurrency(tx.amount)}</div>
+                            <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${tx.type === 'GİRDİ' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>{tx.type}</span>
+                          </td>
+                          {canModify && <td className="p-4 hidden md:table-cell"><div className="flex justify-center gap-2"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-white transition-colors"><Edit size={16} /></button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div></td>}
+                          <td className="p-4 md:hidden cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}><ChevronDown size={20} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
+                        </tr>
+                        <AnimatePresence>
+                          {isExpanded && (
+                            <motion.tr key={`${tx.id}-details`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                              <td colSpan={isAdmin ? (canModify ? 5 : 4) : 3} className="p-4 bg-zinc-800/50 text-zinc-400">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                                  <div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div>
+                                  <div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>
+                                  {tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}
+                                  {isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}
+                                  
+                                  {isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}
+                                  
+                                  {canModify && (<div className="flex md:hidden items-center gap-4 pt-3 border-t border-zinc-700/50 col-span-1 sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"><Edit size={14} /> Düzenle</button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-red-800 hover:bg-red-700 text-white"><Trash2 size={14} /> Sil</button></div>)}
 
-<tbody>
-  {transactions.length === 0 ? (
-    <tr><td colSpan={isAdmin ? (canModify ? 5 : 4) : 3} className="text-center text-zinc-500 py-12">{loading ? 'İşlemler yükleniyor...' : 'Görüntülenecek işlem bulunmuyor.'}</td></tr>
-  ) : (
-    transactions.map(tx => {
-      const transactionUser = users.find(u => u.id === tx.user_id);
-      const isExpanded = expandedRow === tx.id;
-      return (
-        <React.Fragment key={tx.id}>
-          {/* Ana satır, hem mobil hem masaüstü için */}
-          <tr className="border-b border-zinc-800 hover:bg-zinc-800/50" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
-            {/* Masaüstü expand ikonu */}
-            <td className="p-4 text-center hidden md:table-cell cursor-pointer"><ChevronDown size={18} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
-            {/* Başlık ve Tarih */}
-            <td className="p-4 cursor-pointer">
-              <div className="font-bold text-white">{tx.title}</div>
-              <div className="text-sm text-zinc-400">{formatDate(tx.transaction_date)}</div>
-            </td>
-            {/* Bölge (Admin, Masaüstü) */}
-            {isAdmin && <td className="p-4 text-zinc-400 hidden lg:table-cell">{tx.regions?.name || 'Bilinmiyor'}</td>}
-            {/* Tutar ve Tip */}
-            <td className="p-4 text-right cursor-pointer">
-              <div className={`font-bold text-lg ${tx.type === 'GİRDİ' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'GİRDİ' ? '+' : '-'}{formatCurrency(tx.amount)}</div>
-              <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${tx.type === 'GİRDİ' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>{tx.type}</span>
-            </td>
-            {/* Eylemler (Admin, Masaüstü) */}
-            {canModify && <td className="p-4 hidden md:table-cell"><div className="flex justify-center gap-2"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-white transition-colors"><Edit size={16} /></button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div></td>}
-            {/* Mobil expand ikonu */}
-            <td className="p-4 md:hidden cursor-pointer"><ChevronDown size={20} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
-          </tr>
-
-          {/* DÜZELTME: Açılır detay alanı mobil ve masaüstü için ayrıldı */}
-          <AnimatePresence>
-            {isExpanded && (
-              // Bu satır sadece masaüstünde render edilecek
-              <motion.tr key={`${tx.id}-details-desktop`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="hidden md:table-row">
-                <td colSpan={isAdmin ? (canModify ? 5 : 4) : 3} className="p-4 bg-zinc-800/50 text-zinc-400">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                    {/* Detay içeriği (Aynı) */}
-                    <div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div>
-                    <div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>
-                    {tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}
-                    {isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}
-                    {isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}
-                    {tx.image_path && (<div className="sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div>)}
-                    <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div>
-                  </div>
-                </td>
-              </motion.tr>
-            )}
-          </AnimatePresence>
-
-           {/* Bu satır sadece mobilde render edilecek ve `colSpan` sorunu yaratmayacak */}
-           <AnimatePresence>
-            {isExpanded && (
-              <tr className="md:hidden">
-                <td colSpan={3} className="p-0">
-                  <motion.div
-                    key={`${tx.id}-details-mobile`}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="p-4 bg-zinc-800/50 text-zinc-400">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                        {/* Detay içeriği (Aynı) */}
-                        <div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div>
-                        <div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>
-                        {tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}
-                        {isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}
-                        {isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}
-                        {canModify && (<div className="flex items-center gap-4 pt-3 border-t border-zinc-700/50 col-span-1 sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"><Edit size={14} /> Düzenle</button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-red-800 hover:bg-red-700 text-white"><Trash2 size={14} /> Sil</button></div>)}
-                        {tx.image_path && (<div className="sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div>)}
-                        <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div>
-                      </div>
-                    </div>
-                  </motion.div>
-                </td>
-              </tr>
-            )}
-           </AnimatePresence>
-        </React.Fragment>
-      );
-    })
-  )}
-</tbody>
+                                  {tx.image_path && (<div className="sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div>)}
+                                  <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          )}
+                        </AnimatePresence>
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </tbody>
             </table>
           </div>
         </div>
