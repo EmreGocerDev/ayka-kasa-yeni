@@ -80,7 +80,7 @@ const NavContent = ({ userProfile, onLinkClick }: NavProps) => {
             <p className="text-sm text-cyan-400">{userProfile?.role}</p>
         </div>
         <Link
-          href="/forgot-password"
+          href="/reset-password"
           onClick={onLinkClick}
           className="flex items-center justify-center gap-3 w-full px-4 py-3 mb-2 rounded-lg transition-colors text-zinc-400 hover:bg-zinc-800 hover:text-white"
         >
