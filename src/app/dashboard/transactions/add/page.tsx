@@ -189,8 +189,16 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
             </div>
             
             <div>
-              <label htmlFor="amount" className="block text-sm font-medium text-zinc-300 mb-1">Tutar (₺)</label>
-              <input type="number" id="amount" name="amount" required placeholder="örn: 550.75" step="0.01" className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"/>
+              
+              <label htmlFor="amount" className="block text-sm font-medium text-zinc-300 mb-1">Tutar (₺) </label>
+              
+              <input type="number" id="amount" name="amount" required placeholder="örn: 12000.50 | (on iki bin, elli kuruşu temsil etmektedir.)" step="0.01" className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"/>
+             
+             {/* BURASI SİLİNECEK */}
+              <label htmlFor="amount" className="block text-sm font-medium text-green-500 mb-1"> (kuruşlar . [nokta] ile ayrılmalıdır!)</label>
+              <label htmlFor="amount" className="block text-sm font-medium text-red-500 mb-1"> (Örn : yüz bin 100000 gösterimi . ile ayrılmamalıdır!)</label>
+               {/* BURASI SİLİNECEK */}
+
             </div>
 
             {transactionType === 'ÇIKTI' && (
@@ -255,7 +263,7 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                   type="file" 
                   id="image" 
                   name="image" 
-                  accept="image/png, image/jpeg"
+                  accept="image/png, image/jpeg"  
                   onChange={handleImageChange}
                   className="block w-full text-sm text-zinc-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-zinc-700 file:text-zinc-200 hover:file:bg-zinc-600"
                 />
