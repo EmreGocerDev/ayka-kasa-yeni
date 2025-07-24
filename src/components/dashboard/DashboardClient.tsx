@@ -36,7 +36,7 @@ interface DashboardClientProps {
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
 
-// LEVEL 1 kullanıcıları için standart görünüm (Değişiklik yok)
+// LEVEL 1 kullanıcıları için standart görünüm
 const StandardUserView = ({ initialTransactions, creditCardTransactions }: { initialTransactions: Transaction[], creditCardTransactions: Transaction[] }) => {
     const [activeTab, setActiveTab] = useState<'all' | 'creditCard'>('all');
     const transactionsToDisplay = activeTab === 'all' ? initialTransactions : creditCardTransactions;
@@ -68,11 +68,9 @@ const StandardUserView = ({ initialTransactions, creditCardTransactions }: { ini
     );
 };
 
-// GÜNCELLENMİŞ: LEVEL 2 ve 3 kullanıcıları için interaktif kartlı Analiz Görünümü
-// YALNIZCA BU FONKSİYONU GÜNCELLEYİN
-
-// GÜNCELLENMİŞ: LEVEL 2 ve 3 kullanıcıları için interaktif kartlı Analiz Görünümü
+// SADECE LEVEL_3 (SÜPER ADMİN) İÇİN Analiz Görünümü
 const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats }) => {
+    // Bu bileşenin iç mantığı aynı kalabilir
     const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
 
     const handleRegionToggle = (regionName: string) => {
@@ -86,14 +84,14 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
     const clearSelection = () => setSelectedRegions([]);
 
     const selectionSummary = useMemo(() => {
-        if (selectedRegions.length === 0) return null; // Seçim yoksa hesaplama yapma
+        if (selectedRegions.length === 0) return null;
 
         const selectedData = Object.values(regionalStats).filter(region => selectedRegions.includes(region.name));
         
         const totalIncome = selectedData.reduce((sum, region) => sum + region.totalIncome, 0);
         const cashExpenses = selectedData.reduce((sum, region) => sum + region.cashExpenses, 0);
         const creditCardExpenseTotal = selectedData.reduce((sum, region) => sum + region.creditCardExpenseTotal, 0);
-        const cashBalance = totalIncome - cashExpenses; // Bakiye sadece seçilenlerin nakit hareketlerine göre
+        const cashBalance = totalIncome - cashExpenses;
         return { totalIncome, cashExpenses, creditCardExpenseTotal, cashBalance };
     }, [regionalStats, selectedRegions]);
 
@@ -112,7 +110,6 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
                 )}
             </div>
 
-            {/* İnteraktif Bölge Kartları */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.values(regionalStats).map(region => {
                     const isSelected = selectedRegions.includes(region.name);
@@ -123,7 +120,6 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
                             layout
                             onClick={() => handleRegionToggle(region.name)}
                             transition={{ duration: 0.3, ease: "easeInOut" }}
-                            // DEĞİŞİKLİK BU SATIRDA YAPILDI: scale-105 -> scale-[1.02]
                             className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer 
                                 ${isSelected 
                                     ? 'bg-zinc-700/50 border-cyan-500 scale-[1.02] shadow-lg shadow-cyan-500/10' 
@@ -145,7 +141,6 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
                 })}
             </div>
 
-            {/* Seçilenlerin Toplamı Paneli */}
             <AnimatePresence>
             {selectionSummary && (
                 <motion.div 
@@ -181,8 +176,10 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
     );
 };
 
+
 export default function DashboardClient({ user, profile, initialTransactions, creditCardTransactions, stats, regionalStats }: DashboardClientProps) {
-  const isAdmin = profile && (profile.role === 'LEVEL_2' || profile.role === 'LEVEL_3');
+  // DEĞİŞİKLİK 3: isAdmin tanımı artık sadece LEVEL_3'ü içeriyor.
+  const isAdmin = profile && profile.role === 'LEVEL_3';
   
   return (
     <div className="p-4 sm:p-8">
@@ -195,12 +192,13 @@ export default function DashboardClient({ user, profile, initialTransactions, cr
       </header>
       
       <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <StatCard title={isAdmin ? "Ortak Nakit Bakiye" : "Nakit Bakiye"} value={formatCurrency(stats.cashBalance)} icon={<Wallet size={24} className="text-white" />} color="text-cyan-400" />
-        <StatCard title={isAdmin ? "Ortak Toplam Gelir" : "Toplam Gelir"} value={formatCurrency(stats.totalIncome)} icon={<ArrowUpRight size={24} className="text-white" />} color="text-green-400" />
-        <StatCard title={isAdmin ? "Ortak KK Gideri" : "Kredi Kartı Gideri"} value={formatCurrency(stats.creditCardExpenseTotal)} icon={<CreditCard size={24} className="text-white" />} color="text-orange-400" />
-        <StatCard title={isAdmin ? "Ortak Nakit Gider" : "Nakit Gider"} value={formatCurrency(stats.cashExpenses)} icon={<ArrowDownLeft size={24} className="text-white" />} color="text-red-400" />
+        <StatCard title="Nakit Bakiye" value={formatCurrency(stats.cashBalance)} icon={<Wallet size={24} className="text-white" />} color="text-cyan-400" />
+        <StatCard title="Toplam Gelir" value={formatCurrency(stats.totalIncome)} icon={<ArrowUpRight size={24} className="text-white" />} color="text-green-400" />
+        <StatCard title="Kredi Kartı Gideri" value={formatCurrency(stats.creditCardExpenseTotal)} icon={<CreditCard size={24} className="text-white" />} color="text-orange-400" />
+        <StatCard title="Nakit Gider" value={formatCurrency(stats.cashExpenses)} icon={<ArrowDownLeft size={24} className="text-white" />} color="text-red-400" />
       </motion.div>
       
+      {/* Bu koşul artık LEVEL_2 için false dönecek ve StandardUserView gösterilecek */}
       {isAdmin ? (
         <AdminAnalyticsView regionalStats={regionalStats} />
       ) : (

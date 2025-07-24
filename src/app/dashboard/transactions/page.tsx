@@ -67,18 +67,13 @@ export default function AllTransactionsPage() {
 
   const [sortBy, setSortBy] = useState<'transaction_date' | 'created_at'>('transaction_date');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
-
-  // YENİ: Arama terimi için state
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  // YENİ: Arama ve filtreleme sonuçlarını tutan memoized değişken
   const filteredAndSearchedTransactions = useMemo(() => {
     const lowercasedSearchTerm = searchTerm.toLowerCase();
-
     if (!lowercasedSearchTerm) {
       return transactions;
     }
-
     return transactions.filter(tx => {
       const transactionUser = users.find(u => u.id === tx.user_id);
       const searchableContent = [
@@ -91,12 +86,10 @@ export default function AllTransactionsPage() {
         tx.expense_region_info,
         transactionUser?.full_name
       ].join(' ').toLowerCase();
-
       return searchableContent.includes(lowercasedSearchTerm);
     });
   }, [transactions, searchTerm, users]);
 
-  // GÜNCELLENDİ: Özet hesabı artık arama sonuçlarına göre yapılıyor
   const summary = useMemo(() => {
     const data = filteredAndSearchedTransactions;
     const totalIncome = data.filter(tx => tx.type === 'GİRDİ').reduce((acc, tx) => acc + tx.amount, 0);
@@ -120,21 +113,24 @@ export default function AllTransactionsPage() {
     const currentUserRole = profile?.role || 'LEVEL_1';
     setUserRole(currentUserRole);
 
-    const isAdmin = currentUserRole === 'LEVEL_2' || currentUserRole === 'LEVEL_3';
+    // DEĞİŞİKLİK 1: isAdmin artık sadece LEVEL_3 ise true olacak.
+    const isAdmin = currentUserRole === 'LEVEL_3';
 
     if (regions.length === 0) {
       const { data: regionsData } = await supabase.from('regions').select('id, name').order('name');
       setRegions(regionsData || []);
     }
-    if (users.length === 0 && isAdmin) {
-        const { data: usersData } = await supabase.from('profiles').select('id, full_name').order('full_name');
-        setUsers(usersData || []);
+    if (users.length === 0 && isAdmin) { // Bu blok artık sadece LEVEL_3 için çalışır
+      const { data: usersData } = await supabase.from('profiles').select('id, full_name').order('full_name');
+      setUsers(usersData || []);
     }
 
     let query = supabase.from('transactions').select('*, regions(name)')
-      .order(sortBy, { ascending: sortOrder === 'asc' });
+      .order(sortBy, { ascending: sortOrder === 'asc' })
+      .limit(10000);
 
-    if (currentUserRole === 'LEVEL_1' && profile?.region_id) {
+    // DEĞİŞİKLİK 2: Bölge kısıtlaması artık LEVEL_1 VEYA LEVEL_2 için geçerli.
+    if ((currentUserRole === 'LEVEL_1' || currentUserRole === 'LEVEL_2') && profile?.region_id) {
         query = query.eq('region_id', profile.region_id);
     }
     
@@ -151,7 +147,7 @@ export default function AllTransactionsPage() {
         }
     }
 
-    if (isAdmin) {
+    if (isAdmin) { // Bu blok da sadece LEVEL_3 için çalışır
         if (filterRegion) query = query.eq('region_id', filterRegion);
         if (filterUser) query = query.eq('user_id', filterUser);
         if (filterExpenseRegion) query = query.eq('expense_region_info', filterExpenseRegion);
@@ -175,7 +171,8 @@ export default function AllTransactionsPage() {
   }, [fetchData, supabase]);
 
   const canModify = userRole === 'LEVEL_3';
-  const isAdmin = userRole === 'LEVEL_2' || userRole === 'LEVEL_3';
+  // DEĞİŞİKLİK 3: isAdmin tanımı burada da güncellendi.
+  const isAdmin = userRole === 'LEVEL_3';
 
   const formatCurrency = (amount: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('tr-TR', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -184,7 +181,7 @@ export default function AllTransactionsPage() {
   const clearFilters = () => {
     setFilterStartDate(''); setFilterEndDate(''); setFilterRegion(''); setFilterType('');
     setFilterPaymentMethod(''); setFilterInvoiceType(''); setFilterExpenseRegion(''); setFilterUser('');
-    setSearchTerm(''); // Arama terimini de temizle
+    setSearchTerm('');
     setResult(null);
   };
   
@@ -390,7 +387,7 @@ export default function AllTransactionsPage() {
               </thead>
               <tbody>
                 {filteredAndSearchedTransactions.length === 0 ? (
-                  <tr><td colSpan={isAdmin ? (canModify ? 5 : 4) : 3} className="text-center text-zinc-500 py-12">
+                  <tr><td colSpan={isAdmin ? (canModify ? 5 : 4) : (canModify ? 4 : 3)} className="text-center text-zinc-500 py-12">
                     {loading ? 'İşlemler yükleniyor...' : (searchTerm ? 'Arama sonucu bulunamadı.' : 'Görüntülenecek işlem bulunmuyor.')}
                   </td></tr>
                 ) : (
@@ -399,67 +396,73 @@ export default function AllTransactionsPage() {
                     const isExpanded = expandedRow === tx.id;
                     return (
                       <React.Fragment key={tx.id}>
-                        <tr className="border-b border-zinc-800 hover:bg-zinc-800/50" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
-                          <td className="p-4 text-center hidden md:table-cell cursor-pointer"><ChevronDown size={18} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
-                          <td className="p-4 cursor-pointer">
+                        <tr className="border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer" onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
+                          <td className="p-4 text-center hidden md:table-cell"><ChevronDown size={18} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
+                          <td className="p-4">
                             <div className="font-bold text-white">{tx.title}</div>
                             <div className="text-sm text-zinc-400">{formatDate(tx.transaction_date)}</div>
                           </td>
                           {isAdmin && <td className="p-4 text-zinc-400 hidden lg:table-cell">{tx.regions?.name || 'Bilinmiyor'}</td>}
-                          <td className="p-4 text-right cursor-pointer">
+                          <td className="p-4 text-right">
                             <div className={`font-bold text-lg ${tx.type === 'GİRDİ' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'GİRDİ' ? '+' : '-'}{formatCurrency(tx.amount)}</div>
                             <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${tx.type === 'GİRDİ' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>{tx.type}</span>
                           </td>
-                          {canModify && <td className="p-4 hidden md:table-cell"><div className="flex justify-center gap-2"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-white transition-colors"><Edit size={16} /></button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div></td>}
-                          <td className="p-4 md:hidden cursor-pointer"><ChevronDown size={20} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
+                          {canModify && 
+                            <td className="p-4 hidden md:table-cell">
+                              <div className="flex justify-center items-center gap-2">
+                                <button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-white transition-colors"><Edit size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
+                              </div>
+                            </td>
+                          }
+                          {!canModify && isAdmin && <td className="p-4 hidden md:table-cell"></td>}
+                          <td className="p-4 text-center md:hidden"><ChevronDown size={20} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
                         </tr>
 
                         <AnimatePresence>
                           {isExpanded && (
-                            <motion.tr key={`${tx.id}-details-desktop`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="hidden md:table-row">
-                              <td colSpan={isAdmin ? (canModify ? 5 : 4) : 3} className="p-4 bg-zinc-800/50 text-zinc-400">
+                            <motion.tr 
+                              key={`${tx.id}-details`}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              exit={{ opacity: 0 }}
+                              className="bg-zinc-800/50"
+                            >
+                              <td colSpan={isAdmin ? (canModify ? 5 : 4) : (canModify ? 4 : 3)} className="p-4 text-zinc-400">
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
                                   <div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div>
                                   <div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>
                                   {tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}
                                   {isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}
                                   {isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}
-                                  {tx.image_path && (<div className="sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div>)}
-                                  <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div>
+                                  
+                                  {tx.image_path && (
+                                    <div className="col-span-1 sm:col-span-2">
+                                      <button 
+                                        onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} 
+                                        disabled={actionLoading} 
+                                        className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50">
+                                          <Eye size={14} /> Görseli Görüntüle
+                                      </button>
+                                    </div>
+                                  )}
+                                  
+                                  {canModify && (
+                                      <div className="flex items-center gap-4 pt-3 border-t border-zinc-700/50 col-span-1 sm:col-span-2 md:hidden">
+                                          <button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"><Edit size={14} /> Düzenle</button>
+                                          <button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-red-800 hover:bg-red-700 text-white"><Trash2 size={14} /> Sil</button>
+                                      </div>
+                                  )}
+
+                                  <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50">
+                                      <strong className="text-zinc-500">Kayıt Tarihi:</strong>
+                                      <span className="text-zinc-500">{formatDateTime(tx.created_at)}</span>
+                                  </div>
                                 </div>
                               </td>
                             </motion.tr>
                           )}
                         </AnimatePresence>
-
-                       <AnimatePresence>
-                        {isExpanded && (
-                          <tr className="md:hidden">
-                            <td colSpan={3} className="p-0">
-                              <motion.div
-                                key={`${tx.id}-details-mobile`}
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                className="overflow-hidden"
-                              >
-                                <div className="p-4 bg-zinc-800/50 text-zinc-400">
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                                    <div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div>
-                                    <div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>
-                                    {tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}
-                                    {isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}
-                                    {isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}
-                                    {canModify && (<div className="flex items-center gap-4 pt-3 border-t border-zinc-700/50 col-span-1 sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"><Edit size={14} /> Düzenle</button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-red-800 hover:bg-red-700 text-white"><Trash2 size={14} /> Sil</button></div>)}
-                                    {tx.image_path && (<div className="sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div>)}
-                                    <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            </td>
-                          </tr>
-                        )}
-                       </AnimatePresence>
                       </React.Fragment>
                     );
                   })
@@ -543,4 +546,4 @@ function ImageViewerModal({ imageUrl, onClose }: { imageUrl: string, onClose: ()
             <button onClick={onClose} className="absolute top-4 right-4 text-white bg-black/50 rounded-full p-2 hover:bg-black/80 transition-colors"> <X size={24} /> </button>
         </motion.div>
     );
-}
+} 
