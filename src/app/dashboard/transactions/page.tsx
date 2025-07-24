@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Edit, Trash2, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Filter, X, FileText, TrendingUp, TrendingDown, Wallet, Landmark, Receipt, Eye, MapPin, User, CreditCard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
+import { saveAs } from 'file-saver';
 
 // Tipler
 type Transaction = {
@@ -35,6 +36,7 @@ type Region = {
 type UserProfile = {
     id: string;
     full_name: string;
+    region_id?: string | null;
 };
 
 // Ana Component
@@ -139,10 +141,10 @@ export default function AllTransactionsPage() {
       setRegions(regionsData || []);
     }
     if (users.length === 0 && isAdmin) {
-      const { data: usersData } = await supabase.from('profiles').select('id, full_name').order('full_name');
-      setUsers(usersData || []);
-    }
-
+  // select içine 'region_id' eklendi
+  const { data: usersData } = await supabase.from('profiles').select('id, full_name, region_id').order('full_name');
+  setUsers(usersData || []);
+}
     const applyFilters = (queryBuilder: any) => {
         if ((currentUserRole === 'LEVEL_1' || currentUserRole === 'LEVEL_2') && profile?.region_id) {
             queryBuilder = queryBuilder.eq('region_id', profile.region_id);
@@ -218,23 +220,109 @@ export default function AllTransactionsPage() {
     setResult(null);
   };
   
-  const handleExportToExcel = async () => {
+
+ const handleExportToExcel = async () => {
     setExporting(true);
     setResult(null);
     try {
-      const dataToExport = filteredAndSearchedTransactions.map(tx => {
+      // Önce o anki kullanıcıyı doğru şekilde alalım
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (!currentUser) throw new Error("Kullanıcı bulunamadı.");
+      
+      // Kullanıcının tam profilini state'den bulalım (region_id'yi de içerir)
+      const currentUserProfile = users.find(u => u.id === currentUser.id);
+
+      // Filtreleme mantığını burada yeniden oluşturalım
+      const applyFilters = (queryBuilder: any) => {
+        if ((userRole === 'LEVEL_1' || userRole === 'LEVEL_2') && currentUserProfile?.region_id) {
+            queryBuilder = queryBuilder.eq('region_id', currentUserProfile.region_id);
+        }
+        if (filterStartDate) queryBuilder = queryBuilder.gte('transaction_date', filterStartDate);
+        if (filterEndDate) queryBuilder = queryBuilder.lte('transaction_date', filterEndDate);
+        if (filterType) queryBuilder = queryBuilder.eq('type', filterType);
+        if (filterPaymentMethod) queryBuilder = queryBuilder.eq('payment_method', filterPaymentMethod);
+        if (filterInvoiceType) {
+            if (filterInvoiceType === 'YOK') queryBuilder = queryBuilder.is('fatura_tipi', null);
+            else queryBuilder = queryBuilder.eq('fatura_tipi', filterInvoiceType);
+        }
+        if (isAdmin) {
+            if (filterRegion) queryBuilder = queryBuilder.eq('region_id', filterRegion);
+            if (filterUser) queryBuilder = queryBuilder.eq('user_id', filterUser);
+            if (filterExpenseRegion) queryBuilder = queryBuilder.eq('expense_region_info', filterExpenseRegion);
+        }
+        return queryBuilder;
+      };
+    
+      let allDataQuery = supabase.from('transactions').select('*, regions(name)').order(sortBy, { ascending: sortOrder === 'asc' }).limit(10000);
+      allDataQuery = applyFilters(allDataQuery);
+      const { data: allTransactions, error } = await allDataQuery;
+
+      if (error || !allTransactions) {
+          throw new Error('Rapor için veriler çekilemedi.');
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet('İşlemler');
+
+      worksheet.columns = [
+        { header: 'İşlem Tarihi', key: 'transaction_date', width: 18 },
+        { header: 'Başlık', key: 'title', width: 40 },
+        { header: 'Miktar', key: 'amount', width: 18 },
+        { header: 'Tip', key: 'type', width: 12 },
+        { header: 'Ödeme Şekli', key: 'payment_method', width: 18 },
+        { header: 'Bölge', key: 'region_name', width: 22 },
+        { header: 'İşlemi Yapan', key: 'user_name', width: 22 },
+        { header: 'Açıklama', key: 'description', width: 50 },
+      ];
+      
+      const headerRow = worksheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 12 };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4A5568' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 20;
+
+      allTransactions.forEach(tx => {
         const transactionUser = users.find(u => u.id === tx.user_id);
-        return {
-        'ID': tx.id, 'İşlem Tarihi': formatDate(tx.transaction_date), 'Başlık': tx.title, 'Miktar': tx.amount, 'Tip': tx.type, 'Ödeme Şekli': tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş', 'Fatura Tipi': tx.fatura_tipi ? tx.fatura_tipi.replace('_', ' ') : 'Yok', 'Açıklama': tx.description || '', 'Bölge': tx.regions?.name || 'Bilinmiyor', 'Gider Bölge Detayı': tx.expense_region_info || 'Yok', 'İşlemi Yapan': transactionUser?.full_name || 'Bilinmiyor', 'Kayıt Tarihi': formatDateTime(tx.created_at),
-      }});
-      const ws = XLSX.utils.json_to_sheet(dataToExport);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "İşlemler");
-      const fileName = `islem_kayitlari_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '_')}.xlsx`;
-      XLSX.writeFile(wb, fileName);
-      setResult({ success: 'İşlemler Excel\'e başarıyla aktarıldı.' });
+        const row = worksheet.addRow({
+          transaction_date: formatDate(tx.transaction_date),
+          title: tx.title,
+          amount: tx.amount,
+          type: tx.type,
+          payment_method: tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş',
+          region_name: tx.regions?.name || 'Bilinmiyor',
+          user_name: transactionUser?.full_name || 'Bilinmiyor',
+          description: tx.description || '',
+        });
+
+        const amountCell = row.getCell('amount');
+        amountCell.numFmt = '"₺"#,##0.00;[Red]-"₺"#,##0.00';
+
+        // Koşullu renklendirme (Yeni Stiller)
+        if (tx.type === 'GİRDİ') {
+          // Gelir: Yeşil (#47d47a) zemin, Siyah yazı (Aynı kaldı)
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF47D47A' } };
+          row.font = { color: { argb: 'FF000000' } };
+        } else if (tx.type === 'ÇIKTI') {
+          if (tx.payment_method === 'KREDI_KARTI') {
+            // Kredi Kartı Gideri: Açık Gri zemin, Turuncu (#e58638) yazı
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } }; // Açık Gri
+            row.font = { bold: true, color: { argb: 'FFE58638' } }; // Turuncu Yazı
+          } else { // Nakit Gider
+            // Nakit Gider: Açık Gri zemin, Kırmızı (#f16e6e) yazı
+            row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } }; // Açık Gri
+            row.font = { bold: true, color: { argb: 'FFF16E6E' } }; // Kırmızı Yazı
+          }
+        }
+      });
+      
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const fileName = `islem_raporu_${new Date().toLocaleDateString('tr-TR').replace(/\./g, '_')}.xlsx`;
+      saveAs(blob, fileName);
+
+      setResult({ success: 'Rapor başarıyla oluşturuldu.' });
     } catch (error: any) {
-      setResult({ error: 'Excel\'e aktarılırken bir hata oluştu: ' + (error.message || 'Bilinmeyen Hata') });
+      setResult({ error: 'Rapor oluşturulurken bir hata oluştu: ' + (error.message || 'Bilinmeyen Hata') });
     } finally {
       setExporting(false);
     }
@@ -449,7 +537,6 @@ export default function AllTransactionsPage() {
   );
 }
 
-// YENİ VE DÜZELTİLMİŞ Sayfalama Bileşeni
 function PaginationControls({ currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalCount, loading }: {
     currentPage: number;
     setCurrentPage: (page: number | ((prev: number) => number)) => void;
@@ -459,7 +546,13 @@ function PaginationControls({ currentPage, setCurrentPage, itemsPerPage, setItem
     loading: boolean;
 }) {
     const totalPages = Math.ceil(totalCount / itemsPerPage);
-
+    if (totalCount <= itemsPerPage && itemsPerPage !== totalCount) {
+        if(totalCount <= 10) setItemsPerPage(10);
+        else if (totalCount <= 25) setItemsPerPage(25);
+        else if (totalCount <= 50) setItemsPerPage(50);
+        else if (totalCount <= 100) setItemsPerPage(100);
+    }
+    
     if (totalCount <= 0) return null;
 
     return (
@@ -478,13 +571,10 @@ function PaginationControls({ currentPage, setCurrentPage, itemsPerPage, setItem
               <option value={25}>25</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
-              {/* EKSİK OLAN "TÜMÜ" SEÇENEĞİ BURAYA EKLENDİ */}
               {totalCount > 100 && <option value={totalCount}>Tümü ({totalCount})</option>}
             </select>
             <span className="hidden sm:inline-block pl-2">| Toplam {totalCount} kayıt</span>
           </div>
-
-          {/* "TÜMÜ" SEÇİLİYKEN SAYFA NAVİGASYONU GİZLENİR */}
           {itemsPerPage < totalCount && (
             <div className="flex items-center gap-2">
               <button 
