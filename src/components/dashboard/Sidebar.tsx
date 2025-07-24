@@ -55,7 +55,8 @@ const NavContent = ({ userProfile, onLinkClick }: NavProps) => {
       <div className="mb-10 flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-white">AYKA KASA</h2>
-          <p className="text-zinc-400 text-sm">Yönetim Paneli</p>
+          <p className="text-zinc-100 text-sm">Yönetim Paneli</p>
+          <p className="text-zinc-400 text-sm">V2.0.9</p>
         </div>
       </div>
       <nav className="flex-grow">

@@ -39,8 +39,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
 
-  // Bu kod, aylık filtreleme olmadan, tüm zamanların verisini çeker.
-  // Önceki cevaptaki gibi aylık filtreleme istenirse bu kısım güncellenebilir.
   useEffect(() => {
     const fetchData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -48,7 +46,8 @@ export default function DashboardPage() {
         router.push('/login');
         return;
       }
-      const { data: profile } = await supabase.from('profiles').select('*, region_id, role').eq('id', user.id).single();
+      // Profile sorgusuna regions(name) eklendi
+      const { data: profile } = await supabase.from('profiles').select('*, regions(name)').eq('id', user.id).single();
       
       const shouldFilterByRegion = profile && (profile.role === 'LEVEL_1' || profile.role === 'LEVEL_2') && profile.region_id;
 
@@ -72,20 +71,11 @@ export default function DashboardPage() {
 
       const { data: regionsData } = await supabase.from('regions').select('*');
 
-      // --- DEĞİŞİKLİK BURADA ---
       const totalIncome = allTransactions?.filter(t => t.type === 'GİRDİ').reduce((sum, t) => sum + t.amount, 0) || 0;
-      
-      // Nakit gideri doğrudan 'NAKİT' ödeme şekline göre hesapla
-      const cashExpenses = allTransactions?.filter(t => t.type === 'ÇIKTI' && t.payment_method === 'NAKİT').reduce((sum, t) => sum + t.amount, 0) || 0;
-
-      const creditCardExpenseTotal = allTransactions?.filter(t => t.type === 'ÇIKTI' && t.payment_method === 'KREDI_KARTI').reduce((sum, t) => sum + t.amount, 0) || 0;
-      
-      // Toplam gider, bu iki spesifik giderin toplamı oldu
+      const cashExpenses = allTransactions?.filter(t => t.type === 'ÇIKTI' && t.payment_method?.toUpperCase() === 'NAKİT').reduce((sum, t) => sum + t.amount, 0) || 0;
+      const creditCardExpenseTotal = allTransactions?.filter(t => t.type === 'ÇIKTI' && t.payment_method?.toUpperCase() === 'KREDI_KARTI').reduce((sum, t) => sum + t.amount, 0) || 0;
       const totalExpense = cashExpenses + creditCardExpenseTotal;
-      
-      // Nakit bakiye mantığı (Gelir - Nakit Gider)
       const cashBalance = totalIncome - cashExpenses;
-      // --- DEĞİŞİKLİK SONU ---
 
       const regionalStats: RegionalStats = {};
       if (profile && profile.role === 'LEVEL_3' && regionsData && allTransactions) {
@@ -99,9 +89,9 @@ export default function DashboardPage() {
             if (tx.type === 'GİRDİ') {
               regionalStats[regionId].totalIncome += tx.amount;
             } else {
-              if (tx.payment_method === 'KREDI_KARTI') {
+              if (tx.payment_method?.toUpperCase() === 'KREDI_KARTI') {
                 regionalStats[regionId].creditCardExpenseTotal += tx.amount;
-              } else if (tx.payment_method === 'NAKİT') { // Burada da daha spesifik olalım
+              } else if (tx.payment_method?.toUpperCase() === 'NAKİT') {
                 regionalStats[regionId].cashExpenses += tx.amount;
               }
             }
@@ -135,7 +125,8 @@ export default function DashboardPage() {
     );
   }
 
-  return (
+  // data && kontrolü eklendi
+  return data && (
     <DashboardClient
       user={data.user!}
       profile={data.profile}

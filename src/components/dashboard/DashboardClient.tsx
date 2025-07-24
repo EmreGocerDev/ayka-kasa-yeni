@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react';
 import { User } from '@supabase/supabase-js';
 import LogoutButton from '@/components/LogoutButton';
-import { ArrowUpRight, ArrowDownLeft, Wallet, CreditCard, XCircle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Wallet, CreditCard, XCircle, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Transaction, Region, RegionalStats } from '@/app/dashboard/page';
 
@@ -14,7 +14,8 @@ type Profile = {
   full_name: string;
   role: string;
   region_id?: string | null;
-} | null;
+  regions?: { name: string | null } | null;
+};
 
 type Stats = {
   totalIncome: number;
@@ -36,7 +37,7 @@ interface DashboardClientProps {
 
 const formatCurrency = (amount: number) => new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(amount);
 
-// LEVEL 1 kullanıcıları için standart görünüm
+// LEVEL 1 ve 2 kullanıcıları için standart görünüm
 const StandardUserView = ({ initialTransactions, creditCardTransactions }: { initialTransactions: Transaction[], creditCardTransactions: Transaction[] }) => {
     const [activeTab, setActiveTab] = useState<'all' | 'creditCard'>('all');
     const transactionsToDisplay = activeTab === 'all' ? initialTransactions : creditCardTransactions;
@@ -70,27 +71,15 @@ const StandardUserView = ({ initialTransactions, creditCardTransactions }: { ini
 
 // SADECE LEVEL_3 (SÜPER ADMİN) İÇİN Analiz Görünümü
 const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats }) => {
-    // Bu bileşenin iç mantığı aynı kalabilir
     const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
-
-    const handleRegionToggle = (regionName: string) => {
-        setSelectedRegions(prev => 
-            prev.includes(regionName) 
-            ? prev.filter(r => r !== regionName)
-            : [...prev, regionName]
-        );
-    };
-
+    const handleRegionToggle = (regionName: string) => { setSelectedRegions(prev => prev.includes(regionName) ? prev.filter(r => r !== regionName) : [...prev, regionName]); };
     const clearSelection = () => setSelectedRegions([]);
-
     const selectionSummary = useMemo(() => {
         if (selectedRegions.length === 0) return null;
-
         const selectedData = Object.values(regionalStats).filter(region => selectedRegions.includes(region.name));
-        
-        const totalIncome = selectedData.reduce((sum, region) => sum + region.totalIncome, 0);
-        const cashExpenses = selectedData.reduce((sum, region) => sum + region.cashExpenses, 0);
-        const creditCardExpenseTotal = selectedData.reduce((sum, region) => sum + region.creditCardExpenseTotal, 0);
+        const totalIncome = selectedData.reduce((sum, r) => sum + r.totalIncome, 0);
+        const cashExpenses = selectedData.reduce((sum, r) => sum + r.cashExpenses, 0);
+        const creditCardExpenseTotal = selectedData.reduce((sum, r) => sum + r.creditCardExpenseTotal, 0);
         const cashBalance = totalIncome - cashExpenses;
         return { totalIncome, cashExpenses, creditCardExpenseTotal, cashBalance };
     }, [regionalStats, selectedRegions]);
@@ -102,33 +91,14 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
                     <h2 className="text-xl font-bold text-white">Bölgesel Analiz</h2>
                     <p className="text-zinc-400 text-sm">Detayları toplu görmek için kartlara tıklayarak seçim yapın.</p>
                 </div>
-                {selectedRegions.length > 0 && (
-                     <button onClick={clearSelection} className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-zinc-700 text-zinc-300 hover:bg-red-800 hover:text-white transition-all">
-                        <XCircle size={14} />
-                        Seçimi Temizle
-                    </button>
-                )}
+                {selectedRegions.length > 0 && ( <button onClick={clearSelection} className="flex items-center gap-2 text-xs font-semibold px-3 py-1.5 rounded-full bg-zinc-700 text-zinc-300 hover:bg-red-800 hover:text-white transition-all"><XCircle size={14} />Seçimi Temizle</button> )}
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {Object.values(regionalStats).map(region => {
                     const isSelected = selectedRegions.includes(region.name);
                     const isSelectionActive = selectedRegions.length > 0;
                     return (
-                        <motion.div 
-                            key={region.name} 
-                            layout
-                            onClick={() => handleRegionToggle(region.name)}
-                            transition={{ duration: 0.3, ease: "easeInOut" }}
-                            className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer 
-                                ${isSelected 
-                                    ? 'bg-zinc-700/50 border-cyan-500 scale-[1.02] shadow-lg shadow-cyan-500/10' 
-                                    : isSelectionActive 
-                                        ? 'bg-zinc-800/50 border-zinc-700 opacity-50 hover:opacity-100 hover:border-zinc-600'
-                                        : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600'
-                                }
-                            `}
-                        >
+                        <motion.div key={region.name} layout onClick={() => handleRegionToggle(region.name)} transition={{ duration: 0.3, ease: "easeInOut" }} className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer ${isSelected ? 'bg-zinc-700/50 border-cyan-500 scale-[1.02] shadow-lg shadow-cyan-500/10' : isSelectionActive ? 'bg-zinc-800/50 border-zinc-700 opacity-50 hover:opacity-100 hover:border-zinc-600' : 'bg-zinc-800/50 border-zinc-700 hover:border-zinc-600' }`}>
                             <h3 className="font-bold text-white mb-3">{region.name}</h3>
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between items-center"><span className="text-zinc-400">Nakit Bakiye:</span> <span className={`font-semibold ${region.cashBalance >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>{formatCurrency(region.cashBalance)}</span></div>
@@ -140,34 +110,15 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
                     )
                 })}
             </div>
-
             <AnimatePresence>
             {selectionSummary && (
-                <motion.div 
-                    initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                    animate={{ opacity: 1, height: 'auto', marginTop: '2rem' }}
-                    exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                    transition={{ duration: 0.4, ease: "easeInOut" }}
-                    className="pt-6 border-t border-dashed border-zinc-700"
-                >
+                <motion.div initial={{ opacity: 0, height: 0, marginTop: 0 }} animate={{ opacity: 1, height: 'auto', marginTop: '2rem' }} exit={{ opacity: 0, height: 0, marginTop: 0 }} transition={{ duration: 0.4, ease: "easeInOut" }} className="pt-6 border-t border-dashed border-zinc-700">
                     <h3 className="text-lg font-bold text-white mb-4">Seçilenlerin Toplamı ({selectedRegions.length} Bölge)</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div className="bg-cyan-900/40 p-4 rounded-lg border border-cyan-800/50">
-                            <p className="text-sm text-cyan-200">Toplam Nakit Bakiye</p>
-                            <p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.cashBalance)}</p>
-                        </div>
-                         <div className="bg-green-900/40 p-4 rounded-lg border border-green-800/50">
-                            <p className="text-sm text-green-200">Toplam Gelir</p>
-                            <p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.totalIncome)}</p>
-                        </div>
-                         <div className="bg-red-900/40 p-4 rounded-lg border border-red-800/50">
-                            <p className="text-sm text-red-200">Toplam Nakit Gider</p>
-                            <p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.cashExpenses)}</p>
-                        </div>
-                        <div className="bg-orange-900/40 p-4 rounded-lg border border-orange-800/50">
-                            <p className="text-sm text-orange-200">Toplam KK Gideri</p>
-                            <p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.creditCardExpenseTotal)}</p>
-                        </div>
+                        <div className="bg-cyan-900/40 p-4 rounded-lg border border-cyan-800/50"><p className="text-sm text-cyan-200">Toplam Nakit Bakiye</p><p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.cashBalance)}</p></div>
+                         <div className="bg-green-900/40 p-4 rounded-lg border border-green-800/50"><p className="text-sm text-green-200">Toplam Gelir</p><p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.totalIncome)}</p></div>
+                         <div className="bg-red-900/40 p-4 rounded-lg border border-red-800/50"><p className="text-sm text-red-200">Toplam Nakit Gider</p><p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.cashExpenses)}</p></div>
+                        <div className="bg-orange-900/40 p-4 rounded-lg border border-orange-800/50"><p className="text-sm text-orange-200">Toplam KK Gideri</p><p className="text-2xl font-bold text-white">{formatCurrency(selectionSummary.creditCardExpenseTotal)}</p></div>
                     </div>
                 </motion.div>
             )}
@@ -176,11 +127,9 @@ const AdminAnalyticsView = ({ regionalStats }: { regionalStats: RegionalStats })
     );
 };
 
-
-export default function DashboardClient({ user, profile, initialTransactions, creditCardTransactions, stats, regionalStats }: DashboardClientProps) {
-  // DEĞİŞİKLİK 3: isAdmin tanımı artık sadece LEVEL_3'ü içeriyor.
+export default function DashboardClient({ user, profile, initialTransactions, creditCardTransactions, stats, regions, regionalStats }: DashboardClientProps) {
   const isAdmin = profile && profile.role === 'LEVEL_3';
-  
+
   return (
     <div className="p-4 sm:p-8">
       <header className="flex justify-between items-center mb-8">
@@ -190,15 +139,34 @@ export default function DashboardClient({ user, profile, initialTransactions, cr
         </div>
         <LogoutButton />
       </header>
+
+      {/* DEĞİŞİKLİK: Koşul basitleştirildi. Artık rol kontrolü yapmıyor. */}
+      {/* Eğer kullanıcının bir bölge adı varsa, rolü ne olursa olsun bu uyarı gösterilir. */}
+      {profile?.regions?.name && (
+        <motion.div 
+          className="bg-red-900/50 border border-red-500/30 text-red-200 px-4 py-3 rounded-xl mb-8 flex items-start gap-4"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <AlertTriangle size={32} className="flex-shrink-0 text-red-400 mt-1" />
+          <div>
+            <h3 className="font-bold text-white">Bölge Bilgisi</h3>
+            <p className="text-sm">
+              Şu anki bölgeniz: <strong className="font-bold text-white">{profile.regions.name}</strong>. 
+              Yapacağınız tüm işlemler bu bölgeye kaydedilecektir. Eğer bölgeniz yanlış ise lütfen yetkililer ile iletişime geçin.
+            </p>
+          </div>
+        </motion.div>
+      )}
       
       <motion.div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-        <StatCard title="Nakit Bakiye" value={formatCurrency(stats.cashBalance)} icon={<Wallet size={24} className="text-white" />} color="text-cyan-400" />
-        <StatCard title="Toplam Gelir" value={formatCurrency(stats.totalIncome)} icon={<ArrowUpRight size={24} className="text-white" />} color="text-green-400" />
-        <StatCard title="Kredi Kartı Gideri" value={formatCurrency(stats.creditCardExpenseTotal)} icon={<CreditCard size={24} className="text-white" />} color="text-orange-400" />
-        <StatCard title="Nakit Gider" value={formatCurrency(stats.cashExpenses)} icon={<ArrowDownLeft size={24} className="text-white" />} color="text-red-400" />
+        <StatCard title={isAdmin ? "Ortak Nakit Bakiye" : "Nakit Bakiye"} value={formatCurrency(stats.cashBalance)} icon={<Wallet size={24} className="text-white" />} color="text-cyan-400" />
+        <StatCard title={isAdmin ? "Ortak Toplam Gelir" : "Toplam Gelir"} value={formatCurrency(stats.totalIncome)} icon={<ArrowUpRight size={24} className="text-white" />} color="text-green-400" />
+        <StatCard title={isAdmin ? "Ortak KK Gideri" : "Kredi Kartı Gideri"} value={formatCurrency(stats.creditCardExpenseTotal)} icon={<CreditCard size={24} className="text-white" />} color="text-orange-400" />
+        <StatCard title={isAdmin ? "Ortak Nakit Gider" : "Nakit Gider"} value={formatCurrency(stats.cashExpenses)} icon={<ArrowDownLeft size={24} className="text-white" />} color="text-red-400" />
       </motion.div>
       
-      {/* Bu koşul artık LEVEL_2 için false dönecek ve StandardUserView gösterilecek */}
       {isAdmin ? (
         <AdminAnalyticsView regionalStats={regionalStats} />
       ) : (
