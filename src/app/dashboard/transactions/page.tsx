@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
-import { Edit, Trash2, ChevronDown, MessageSquare, Filter, X, FileText, TrendingUp, TrendingDown, Wallet, Landmark, Receipt, Eye, MapPin, User, CreditCard } from 'lucide-react';
+import { Edit, Trash2, ChevronDown, ChevronLeft, ChevronRight, MessageSquare, Filter, X, FileText, TrendingUp, TrendingDown, Wallet, Landmark, Receipt, Eye, MapPin, User, CreditCard } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 
@@ -25,6 +25,8 @@ type Transaction = {
   user_id: string | null;
 };
 
+type SummaryTransaction = Pick<Transaction, 'amount' | 'type' | 'payment_method'>;
+
 type Region = {
   id: string;
   name: string;
@@ -41,8 +43,10 @@ export default function AllTransactionsPage() {
   const supabase = createClient();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [summaryData, setSummaryData] = useState<SummaryTransaction[]>([]);
   const [userRole, setUserRole] = useState('LEVEL_1');
   const [loading, setLoading] = useState(true);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -69,8 +73,9 @@ export default function AllTransactionsPage() {
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     if (result) {
@@ -92,7 +97,6 @@ export default function AllTransactionsPage() {
     }
   }, [lastModifiedId, transactions]);
 
-
   const filteredAndSearchedTransactions = useMemo(() => {
     const lowercasedSearchTerm = searchTerm.toLowerCase();
     if (!lowercasedSearchTerm) return transactions;
@@ -104,34 +108,29 @@ export default function AllTransactionsPage() {
   }, [transactions, searchTerm, users]);
 
   const summary = useMemo(() => {
-    const data = filteredAndSearchedTransactions;
+    const data = summaryData;
     const totalIncome = data.filter(tx => tx.type === 'GİRDİ').reduce((acc, tx) => acc + tx.amount, 0);
     const cashExpenses = data.filter(tx => tx.type === 'ÇIKTI' && tx.payment_method !== 'KREDI_KARTI').reduce((acc, tx) => acc + tx.amount, 0);
     const creditCardExpenses = data.filter(tx => tx.type === 'ÇIKTI' && tx.payment_method === 'KREDI_KARTI').reduce((acc, tx) => acc + tx.amount, 0);
     const totalExpense = cashExpenses + creditCardExpenses;
     const balance = totalIncome - cashExpenses;
     return { totalIncome, totalExpense, balance, cashExpenses, creditCardExpenses };
-  }, [filteredAndSearchedTransactions]);
+  }, [summaryData]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      router.push('/login');
-      return;
-    }
+    if (!user) { router.push('/login'); return; }
     
     const { data: profile } = await supabase.from('profiles').select('role, region_id').eq('id', user.id).single();
     const currentUserRole = profile?.role || 'LEVEL_1';
     setUserRole(currentUserRole);
 
-     if (isInitialLoad && profile?.region_id) {
+    if (isInitialLoad && profile?.region_id) {
         setFilterRegion(profile.region_id);
         setIsInitialLoad(false);
-        // State güncellendiği için useEffect bu fonksiyonu doğru filtreyle tekrar çağıracak.
-        // Bu yüzden mevcut sorguya devam etmeden çıkıyoruz ve gereksiz veri çekmiyoruz.
         return; 
-    } 
+    }
     
     const isAdmin = currentUserRole === 'LEVEL_3';
 
@@ -144,38 +143,55 @@ export default function AllTransactionsPage() {
       setUsers(usersData || []);
     }
 
-    let query = supabase.from('transactions').select('*, regions(name)').order(sortBy, { ascending: sortOrder === 'asc' }).limit(10000);
+    const applyFilters = (queryBuilder: any) => {
+        if ((currentUserRole === 'LEVEL_1' || currentUserRole === 'LEVEL_2') && profile?.region_id) {
+            queryBuilder = queryBuilder.eq('region_id', profile.region_id);
+        }
+        if (filterStartDate) queryBuilder = queryBuilder.gte('transaction_date', filterStartDate);
+        if (filterEndDate) queryBuilder = queryBuilder.lte('transaction_date', filterEndDate);
+        if (filterType) queryBuilder = queryBuilder.eq('type', filterType);
+        if (filterPaymentMethod) queryBuilder = queryBuilder.eq('payment_method', filterPaymentMethod);
+        if (filterInvoiceType) {
+            if (filterInvoiceType === 'YOK') queryBuilder = queryBuilder.is('fatura_tipi', null);
+            else queryBuilder = queryBuilder.eq('fatura_tipi', filterInvoiceType);
+        }
+        if (isAdmin) {
+            if (filterRegion) queryBuilder = queryBuilder.eq('region_id', filterRegion);
+            if (filterUser) queryBuilder = queryBuilder.eq('user_id', filterUser);
+            if (filterExpenseRegion) queryBuilder = queryBuilder.eq('expense_region_info', filterExpenseRegion);
+        }
+        return queryBuilder;
+    };
 
-    if ((currentUserRole === 'LEVEL_1' || currentUserRole === 'LEVEL_2') && profile?.region_id) {
-        query = query.eq('region_id', profile.region_id);
-    }
+    let countQuery = supabase.from('transactions').select('*', { count: 'exact', head: true });
+    countQuery = applyFilters(countQuery);
     
-    if (filterStartDate) query = query.gte('transaction_date', filterStartDate);
-    if (filterEndDate) query = query.lte('transaction_date', filterEndDate);
-    if (filterType) query = query.eq('type', filterType);
-    if (filterPaymentMethod) query = query.eq('payment_method', filterPaymentMethod);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage - 1;
+    let dataQuery = supabase.from('transactions').select('*, regions(name)').order(sortBy, { ascending: sortOrder === 'asc' }).range(startIndex, endIndex);
+    dataQuery = applyFilters(dataQuery);
 
-    if (filterInvoiceType) {
-        if (filterInvoiceType === 'YOK') query = query.is('fatura_tipi', null);
-        else query = query.eq('fatura_tipi', filterInvoiceType);
-    }
+    let summaryQuery = supabase.from('transactions').select('amount, type, payment_method').limit(10000);
+    summaryQuery = applyFilters(summaryQuery);
 
-    if (isAdmin) {
-        if (filterRegion) query = query.eq('region_id', filterRegion);
-        if (filterUser) query = query.eq('user_id', filterUser);
-        if (filterExpenseRegion) query = query.eq('expense_region_info', filterExpenseRegion);
-    }
+    const [
+        { count, error: countError },
+        { data: transactionsData, error: dataError },
+        { data: allSummaryData, error: summaryError }
+    ] = await Promise.all([countQuery, dataQuery, summaryQuery]);
 
-    const { data: transactionsData, error } = await query;
-
-    if (error) {
+    if (count !== null) setTotalCount(count);
+    
+    const queryError = countError || dataError || summaryError;
+    if (queryError) {
       setResult({ error: 'İşlemler yüklenirken bir sorun oluştu.' });
-      console.error('Supabase Fetch Error:', error);
+      console.error('Supabase Fetch Error:', queryError);
     } else {
       setTransactions(transactionsData || []);
+      setSummaryData(allSummaryData || []);
     }
     setLoading(false);
-  }, [router, supabase, filterStartDate, filterEndDate, filterRegion, filterType, regions.length, users.length, filterPaymentMethod, filterInvoiceType, filterExpenseRegion, filterUser, sortBy, sortOrder]); 
+  }, [router, supabase, filterStartDate, filterEndDate, filterRegion, filterType, regions.length, users.length, filterPaymentMethod, filterInvoiceType, filterExpenseRegion, filterUser, sortBy, sortOrder, currentPage, itemsPerPage, isInitialLoad]); 
 
   useEffect(() => {
     fetchData();
@@ -198,6 +214,7 @@ export default function AllTransactionsPage() {
     setFilterStartDate(''); setFilterEndDate(''); setFilterRegion(''); setFilterType('');
     setFilterPaymentMethod(''); setFilterInvoiceType(''); setFilterExpenseRegion(''); setFilterUser('');
     setSearchTerm('');
+    setCurrentPage(1);
     setResult(null);
   };
   
@@ -302,16 +319,7 @@ export default function AllTransactionsPage() {
 
   return (
     <>
-      <style jsx global>{`
-        @keyframes flash-red {
-          50% {
-            background-color: rgba(127, 29, 29, 0.7); /* Tailwind red-800, %70 opacity */
-          }
-        }
-        .animate-flash-red {
-          animation: flash-red 1s ease-in-out 3;
-        }
-      `}</style>
+      <style jsx global>{`@keyframes flash-red { 50% { background-color: rgba(127, 29, 29, 0.7); } } .animate-flash-red { animation: flash-red 1s ease-in-out 3; }`}</style>
       <div className="p-4 sm:p-6 lg:p-8">
         <header className="mb-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className='text-center sm:text-left'>
@@ -324,12 +332,8 @@ export default function AllTransactionsPage() {
         </header>
 
         <AnimatePresence>
-            {result?.success && (
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.2 } }} className="mb-4 p-3 bg-green-500/20 text-green-300 border border-green-500/30 rounded-lg">{result.success}</motion.div>
-            )}
-            {result?.error && (
-                <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.2 } }} className="mb-4 p-3 bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg">{result.error}</motion.div>
-            )}
+            {result?.success && ( <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.2 } }} className="mb-4 p-3 bg-green-500/20 text-green-300 border border-green-500/30 rounded-lg">{result.success}</motion.div> )}
+            {result?.error && ( <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: { duration: 0.2 } }} className="mb-4 p-3 bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg">{result.error}</motion.div> )}
         </AnimatePresence>
         
         <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
@@ -376,27 +380,21 @@ export default function AllTransactionsPage() {
             </div>
 
             <div className="relative w-full sm:w-64">
-                <input
-                    type="text"
-                    placeholder="Tüm detaylarda ara..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-4 pr-10 py-2 text-sm bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                />
+                <input type="text" placeholder="Tüm detaylarda ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-4 pr-10 py-2 text-sm bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"/>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                    {searchTerm ? (
-                        <button 
-                            onClick={() => setSearchTerm('')} 
-                            className="text-zinc-400 hover:text-white pointer-events-auto"
-                        >
-                            <X size={16} />
-                        </button>
-                    ) : (
-                        <Filter size={16} className="text-zinc-400" />
-                    )}
+                    {searchTerm ? ( <button onClick={() => setSearchTerm('')} className="text-zinc-400 hover:text-white pointer-events-auto"><X size={16} /></button> ) : ( <Filter size={16} className="text-zinc-400" /> )}
                 </div>
             </div>
         </div>
+        
+        <PaginationControls
+            currentPage={currentPage}
+            setCurrentPage={setCurrentPage}
+            itemsPerPage={itemsPerPage}
+            setItemsPerPage={setItemsPerPage}
+            totalCount={totalCount}
+            loading={loading}
+        />
 
         <div className="bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-2xl">
           <div className="overflow-x-auto">
@@ -413,7 +411,7 @@ export default function AllTransactionsPage() {
               <tbody>
                 {filteredAndSearchedTransactions.length === 0 ? (
                   <tr><td colSpan={isAdmin ? (canModify ? 5 : 4) : (canModify ? 4 : 3)} className="text-center text-zinc-500 py-12">
-                    {loading ? 'İşlemler yükleniyor...' : (searchTerm ? 'Arama sonucu bulunamadı.' : 'Görüntülenecek işlem bulunmuyor.')}
+                    {loading ? 'İşlemler yükleniyor...' : (searchTerm ? 'Arama sonucu bulunamadı.' : 'Filtreyle eşleşen işlem bulunamadı.')}
                   </td></tr>
                 ) : (
                   filteredAndSearchedTransactions.map(tx => {
@@ -422,57 +420,16 @@ export default function AllTransactionsPage() {
                     const isModified = lastModifiedId === tx.id;
                     return (
                       <React.Fragment key={tx.id}>
-                        <tr 
-                          data-id={tx.id}
-                          className={`border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer ${isModified ? 'animate-flash-red' : ''}`}
-                          onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
+                        <tr data-id={tx.id} className={`border-b border-zinc-800 hover:bg-zinc-800/50 cursor-pointer ${isModified ? 'animate-flash-red' : ''}`} onClick={() => setExpandedRow(isExpanded ? null : tx.id)}>
                           <td className="p-4 text-center hidden md:table-cell"><ChevronDown size={18} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
-                          <td className="p-4">
-                            <div className="font-bold text-white">{tx.title}</div>
-                            <div className="text-sm text-zinc-400">{formatDate(tx.transaction_date)}</div>
-                          </td>
+                          <td className="p-4"><div className="font-bold text-white">{tx.title}</div><div className="text-sm text-zinc-400">{formatDate(tx.transaction_date)}</div></td>
                           {isAdmin && <td className="p-4 text-zinc-400 hidden lg:table-cell">{tx.regions?.name || 'Bilinmiyor'}</td>}
-                          <td className="p-4 text-right">
-                            <div className={`font-bold text-lg ${tx.type === 'GİRDİ' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'GİRDİ' ? '+' : '-'}{formatCurrency(tx.amount)}</div>
-                            <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${tx.type === 'GİRDİ' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>{tx.type}</span>
-                          </td>
-                          {canModify && 
-                            <td className="p-4 hidden md:table-cell">
-                              <div className="flex justify-center items-center gap-2 transition-opacity duration-200">
-                                <button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-white transition-colors"><Edit size={16} /></button>
-                                <button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-                              </div>
-                            </td>
-                          }
+                          <td className="p-4 text-right"><div className={`font-bold text-lg ${tx.type === 'GİRDİ' ? 'text-green-400' : 'text-red-400'}`}>{tx.type === 'GİRDİ' ? '+' : '-'}{formatCurrency(tx.amount)}</div><span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${tx.type === 'GİRDİ' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>{tx.type}</span></td>
+                          {canModify && <td className="p-4 hidden md:table-cell"><div className="flex justify-center items-center gap-2 transition-opacity duration-200"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-white transition-colors"><Edit size={16} /></button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="p-2 text-zinc-400 hover:text-red-500 transition-colors"><Trash2 size={16} /></button></div></td>}
                           {!canModify && isAdmin && <td className="p-4 hidden md:table-cell"></td>}
                           <td className="p-4 text-center md:hidden"><ChevronDown size={20} className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''} text-white`} /></td>
                         </tr>
-
-                        <AnimatePresence>
-                          {isExpanded && (
-                            <motion.tr 
-                              key={`${tx.id}-details`}
-                              initial={{ opacity: 0 }}
-                              animate={{ opacity: 1 }}
-                              exit={{ opacity: 0 }}
-                              transition={{ duration: 0.2 }}
-                              className="bg-zinc-800/50"
-                            >
-                              <td colSpan={isAdmin ? (canModify ? 5 : 4) : (canModify ? 4 : 3)} className="p-4 text-zinc-400">
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm">
-                                  <div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div>
-                                  <div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>
-                                  {tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}
-                                  {isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}
-                                  {isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}
-                                  {tx.image_path && ( <div className="col-span-1 sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div> )}
-                                  {canModify && ( <div className="flex items-center gap-4 pt-3 border-t border-zinc-700/50 col-span-1 sm:col-span-2 md:hidden"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"><Edit size={14} /> Düzenle</button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-red-800 hover:bg-red-700 text-white"><Trash2 size={14} /> Sil</button></div> )}
-                                  <div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div>
-                                </div>
-                              </td>
-                            </motion.tr>
-                          )}
-                        </AnimatePresence>
+                        <AnimatePresence>{isExpanded && ( <motion.tr key={`${tx.id}-details`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="bg-zinc-800/50"><td colSpan={isAdmin ? (canModify ? 5 : 4) : (canModify ? 4 : 3)} className="p-4 text-zinc-400"><div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 text-sm"><div className="flex gap-2 items-start col-span-1 sm:col-span-2"><MessageSquare size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Açıklama:</strong> <span className="text-zinc-200">{tx.description || 'Girilmemiş.'}</span></span></div><div className="flex gap-2 items-center"><Landmark size={14} className="flex-shrink-0" /><span><strong>Ödeme Şekli:</strong> <span className="text-zinc-200">{tx.payment_method?.replace('_', ' ') || 'Belirtilmemiş'}</span></span></div>{tx.type === 'ÇIKTI' && (<div className="flex gap-2 items-center"><Receipt size={14} className="flex-shrink-0" /><span><strong>Fatura Tipi:</strong> <span className="text-zinc-200">{tx.fatura_tipi?.replace('_', ' ') || 'Yok'}</span></span></div>)}{isAdmin && tx.expense_region_info && (<div className="flex gap-2 items-start"><MapPin size={14} className="mt-0.5 flex-shrink-0" /><span><strong>Gider Bölge Detayı:</strong> <span className="text-zinc-200">{tx.expense_region_info}</span></span></div>)}{isAdmin && transactionUser && (<div className="flex gap-2 items-center"><User size={14} className="flex-shrink-0" /><span><strong>İşlemi Yapan:</strong> <span className="text-zinc-200">{transactionUser.full_name}</span></span></div>)}{tx.image_path && ( <div className="col-span-1 sm:col-span-2"><button onClick={(e) => { e.stopPropagation(); handleViewImage(tx.image_path!);}} disabled={actionLoading} className="inline-flex items-center gap-2 text-sm font-semibold py-2 px-3 bg-cyan-600/50 text-cyan-300 rounded-lg hover:bg-cyan-600/80 hover:text-white transition-all disabled:opacity-50"><Eye size={14} /> Görseli Görüntüle</button></div> )}{canModify && ( <div className="flex items-center gap-4 pt-3 border-t border-zinc-700/50 col-span-1 sm:col-span-2 md:hidden"><button onClick={(e) => { e.stopPropagation(); setEditingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-zinc-700 hover:bg-zinc-600 text-white"><Edit size={14} /> Düzenle</button><button onClick={(e) => { e.stopPropagation(); setDeletingTransaction(tx); }} className="flex items-center gap-2 py-2 px-3 text-sm rounded-lg bg-red-800 hover:bg-red-700 text-white"><Trash2 size={14} /> Sil</button></div> )}<div className="flex gap-2 items-center col-span-full sm:col-span-2 mt-2 pt-3 border-t border-zinc-700/50"><strong className="text-zinc-500">Kayıt Tarihi:</strong><span className="text-zinc-500">{formatDateTime(tx.created_at)}</span></div></div></td></motion.tr>)}</AnimatePresence>
                       </React.Fragment>
                     );
                   })
@@ -492,14 +449,70 @@ export default function AllTransactionsPage() {
   );
 }
 
-// Edit Modal
+// YENİ VE DÜZELTİLMİŞ Sayfalama Bileşeni
+function PaginationControls({ currentPage, setCurrentPage, itemsPerPage, setItemsPerPage, totalCount, loading }: {
+    currentPage: number;
+    setCurrentPage: (page: number | ((prev: number) => number)) => void;
+    itemsPerPage: number;
+    setItemsPerPage: (count: number) => void;
+    totalCount: number;
+    loading: boolean;
+}) {
+    const totalPages = Math.ceil(totalCount / itemsPerPage);
+
+    if (totalCount <= 0) return null;
+
+    return (
+        <div className="flex flex-col sm:flex-row items-center justify-between p-3 bg-zinc-900/60 backdrop-blur-xl border border-zinc-800 rounded-xl mb-4">
+          <div className="flex items-center gap-3 text-sm text-zinc-400 mb-2 sm:mb-0">
+            <span>Sayfa Başına:</span>
+            <select 
+              value={itemsPerPage} 
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-zinc-800 text-white rounded-md p-2 border-2 border-zinc-700 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value={10}>10</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              {/* EKSİK OLAN "TÜMÜ" SEÇENEĞİ BURAYA EKLENDİ */}
+              {totalCount > 100 && <option value={totalCount}>Tümü ({totalCount})</option>}
+            </select>
+            <span className="hidden sm:inline-block pl-2">| Toplam {totalCount} kayıt</span>
+          </div>
+
+          {/* "TÜMÜ" SEÇİLİYKEN SAYFA NAVİGASYONU GİZLENİR */}
+          {itemsPerPage < totalCount && (
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1 || loading}
+                className="p-2 rounded-md bg-zinc-800/50 hover:bg-cyan-500 text-zinc-300 hover:text-white border-2 border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <span className="text-sm text-zinc-300 font-semibold px-2">
+                Sayfa {currentPage} <span className='text-zinc-500'>/ {totalPages}</span>
+              </span>
+              <button 
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages || loading}
+                className="p-2 rounded-md bg-zinc-800/50 hover:bg-cyan-500 text-zinc-300 hover:text-white border-2 border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+          )}
+        </div>
+    );
+}
+
 function EditTransactionModal({ transaction, regions, onClose, onSave, loading }: { transaction: Transaction, regions: Region[], onClose: () => void, onSave: (e: React.FormEvent<HTMLFormElement>) => void, loading: boolean }) {
     const [currentType, setCurrentType] = useState(transaction.type);
-  
-    useEffect(() => {
-      setCurrentType(transaction.type);
-    }, [transaction]);
-  
+    useEffect(() => { setCurrentType(transaction.type); }, [transaction]);
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
         <motion.div initial={{ scale: 0.9, y: 10 }} animate={{ scale: 1, y: 0 }} transition={{ duration: 0.2, ease: "easeOut" }} className="relative bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg">
@@ -514,17 +527,14 @@ function EditTransactionModal({ transaction, regions, onClose, onSave, loading }
                     <label className="flex items-center justify-center p-3 bg-zinc-800/50 rounded-lg border-2 border-zinc-700 cursor-pointer has-[:checked]:border-red-500 has-[:checked]:bg-red-500/20 transition-all"><input type="radio" name="type" value="ÇIKTI" required checked={currentType === 'ÇIKTI'} onChange={(e) => setCurrentType(e.target.value as 'ÇIKTI')} className="sr-only"/><span className="font-semibold text-red-400">Gider</span></label>
                 </div>
             </div>
-  
             {currentType === 'ÇIKTI' && (
               <>
                 <div><label htmlFor="payment_method" className="block text-sm font-medium text-zinc-300 mb-1">Ödeme Türü</label><select id="payment_method" name="payment_method" required defaultValue={transaction.payment_method} className="w-full pl-3 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"><option value="NAKİT">Nakit</option><option value="KREDI_KARTI">Kredi Kartı</option></select></div>
                 <div><label htmlFor="fatura_tipi" className="block text-sm font-medium text-zinc-300 mb-1">Fatura Tipi</label><select id="fatura_tipi" name="fatura_tipi" required defaultValue={transaction.fatura_tipi || 'YOK'} className="w-full pl-3 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"><option value="YOK">Yok</option><option value="FATURA">Fatura</option><option value="E_FATURA">E-Fatura</option><option value="KASA_FISI">Kasa Fişi</option></select></div>
               </>
             )}
-  
             <div><label htmlFor="transaction_date" className="block text-sm font-medium text-zinc-300 mb-1">İşlem Tarihi</label><input type="date" name="transaction_date" id="transaction_date" defaultValue={transaction.transaction_date.split('T')[0]} required className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"/></div>
             <div><label htmlFor="description" className="block text-sm font-medium text-zinc-300 mb-1">Açıklama</label><textarea id="description" name="description" defaultValue={transaction.description || ''} rows={3} className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"></textarea></div>
-  
             <div className="pt-4 flex justify-end space-x-3">
               <button type="button" onClick={onClose} className="py-2 px-4 font-bold text-zinc-300 bg-zinc-800/50 border border-zinc-700 rounded-lg hover:bg-zinc-700/50 transition-colors">İptal</button>
               <button type="submit" disabled={loading} className="flex justify-center items-center gap-2 py-2 px-4 font-bold text-white bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg hover:scale-105 transition-transform disabled:opacity-50">{loading ? 'Kaydediliyor...' : 'Kaydet'}</button>
@@ -535,7 +545,6 @@ function EditTransactionModal({ transaction, regions, onClose, onSave, loading }
     );
 }
 
-// Delete Modal
 function DeleteTransactionModal({ transaction, onClose, onConfirm, loading }: { transaction: Transaction, onClose: () => void, onConfirm: () => void, loading: boolean }) {
     return (
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -548,7 +557,6 @@ function DeleteTransactionModal({ transaction, onClose, onConfirm, loading }: { 
     );
 }
 
-// Image Viewer Modal
 function ImageViewerModal({ imageUrl, onClose }: { imageUrl: string, onClose: () => void }) {
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={onClose} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 cursor-pointer">
