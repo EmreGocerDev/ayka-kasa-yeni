@@ -21,7 +21,7 @@ export default function AddTransactionPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [compressedImageFile, setCompressedImageFile] = useState<File | null>(null);
 
-useEffect(() => {
+  useEffect(() => {
     const fetchInitialData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
@@ -43,7 +43,7 @@ useEffect(() => {
     };
 
     fetchInitialData();
-}, [supabase]);
+  }, [supabase]);
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -73,12 +73,26 @@ useEffect(() => {
     }
   };
 
-const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setResult(null);
 
+    // --- 1. EKLENEN KISIM: Gelecek tarih kontrolü ---
     const formData = new FormData(e.currentTarget);
+    const transactionDateStr = formData.get('transaction_date') as string;
+    const transactionDate = new Date(transactionDateStr);
+    
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); 
+
+    if (transactionDate > today) {
+        setResult({ error: 'İleri bir tarih için işlem kaydedilemez.' });
+        setLoading(false);
+        return;
+    }
+    // --- Kontrol sonu ---
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user || !userProfile) {
@@ -111,7 +125,7 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
       title: formData.get('title') as string,
       amount: parseFloat(formData.get('amount') as string),
       type: type,
-      transaction_date: formData.get('transaction_date') as string,
+      transaction_date: transactionDateStr,
       description: formData.get('description') as string,
       user_id: user.id,
       region_id: transactionRegionId,
@@ -147,9 +161,12 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
       }, 1500);
     }
     setLoading(false);
-};
+  };
 
   const canChangeRegion = userProfile && (userProfile.role === 'LEVEL_2' || userProfile.role === 'LEVEL_3');
+
+  // --- 2. EKLENEN KISIM: Bugünün tarihini alıyoruz ---
+  const todayString = new Date().toISOString().split('T')[0];
 
   if (loading && !result) {
     return (
@@ -189,16 +206,8 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
             </div>
             
             <div>
-              
-              <label htmlFor="amount" className="block text-sm font-medium text-zinc-300 mb-1">Tutar (₺) </label>
-              
-              <input type="number" id="amount" name="amount" required placeholder="örn: 12000.50 | (on iki bin, elli kuruşu temsil etmektedir.)" step="0.01" className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"/>
-             
-             {/* BURASI SİLİNECEK */}
-              <label htmlFor="amount" className="block text-sm font-medium text-green-500 mb-1"> (kuruşlar . [nokta] ile ayrılmalıdır!)</label>
-              <label htmlFor="amount" className="block text-sm font-medium text-red-500 mb-1"> (Örn : yüz bin 100000 gösterimi . ile ayrılmamalıdır!)</label>
-               {/* BURASI SİLİNECEK */}
-
+              <label htmlFor="amount" className="block text-sm font-medium text-zinc-300 mb-1">Tutar (₺)</label>
+              <input type="number" id="amount" name="amount" required placeholder="örn: 1250.50" step="0.01" className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"/>
             </div>
 
             {transactionType === 'ÇIKTI' && (
@@ -213,7 +222,6 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
                 </div>
                 <div>
                   <label htmlFor="fatura_tipi" className="block text-sm font-medium text-zinc-300 mb-1">Fatura Tipi</label>
-                  {/* GÜNCELLENDİ: "Fatura" seçeneği eklendi */}
                   <select id="fatura_tipi" name="fatura_tipi" required className="w-full pl-3 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500">
                       <option value="YOK">Yok</option>
                       <option value="FATURA">Fatura</option>
@@ -224,7 +232,6 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
               </>
             )}
 
-            {/* GÜNCELLENDİ: Yetkili alanı boşlukları azaltıldı (p-3 ve space-y-2) */}
             {canChangeRegion && transactionType === 'ÇIKTI' && (
               <div className="space-y-2 p-3 border border-zinc-700/50 rounded-lg bg-zinc-900/30">
                 <h3 className="text-md font-semibold text-cyan-400">Yetkili Harcaması Bilgisi</h3>
@@ -241,7 +248,16 @@ const handleFormSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
 
             <div>
               <label htmlFor="transaction_date" className="block text-sm font-medium text-zinc-300 mb-1">İşlem Tarihi</label>
-              <input type="date" id="transaction_date" name="transaction_date" required defaultValue={new Date().toISOString().split('T')[0]} className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"/>
+              {/* --- 3. GÜNCELLENEN KISIM: max özelliği eklendi --- */}
+              <input 
+                type="date" 
+                id="transaction_date" 
+                name="transaction_date" 
+                required 
+                defaultValue={todayString} 
+                max={todayString}
+                className="w-full pl-4 pr-4 py-2 bg-zinc-800/50 text-white border-2 border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500"
+              />
             </div>
 
             <div>

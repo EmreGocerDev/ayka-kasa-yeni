@@ -7,6 +7,7 @@ import { createClient } from '@/utils/supabase/client';
 // GÜNCELLENDİ: Hem Sidebar hem de yeni MobileNav import ediliyor
 import Sidebar, { MobileNav } from '@/components/dashboard/Sidebar';
 
+
 // Profile tipi tanımı
 type Profile = {
   full_name: string;

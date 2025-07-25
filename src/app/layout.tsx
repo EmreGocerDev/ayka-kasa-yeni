@@ -20,6 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
+    
     <html lang="tr" /* suppressHydrationWarning'ı KALDIRDIK */> 
       {/* body'ye sabit dark mode renklerini geri ekliyoruz */}
       <body className={`${montserrat.className} bg-zinc-950 text-white`}> 
