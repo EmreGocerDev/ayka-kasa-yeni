@@ -34,9 +34,9 @@ type Region = {
 };
 
 type UserProfile = {
-    id: string;
-    full_name: string;
-    region_id?: string | null;
+  id: string;
+  full_name: string;
+  region_id?: string | null;
 };
 
 // Ana Component
@@ -141,10 +141,10 @@ export default function AllTransactionsPage() {
       setRegions(regionsData || []);
     }
     if (users.length === 0 && isAdmin) {
-  // select içine 'region_id' eklendi
-  const { data: usersData } = await supabase.from('profiles').select('id, full_name, region_id').order('full_name');
-  setUsers(usersData || []);
-}
+      // select içine 'region_id' eklendi
+      const { data: usersData } = await supabase.from('profiles').select('id, full_name, region_id').order('full_name');
+      setUsers(usersData || []);
+    }
     const applyFilters = (queryBuilder: any) => {
         if ((currentUserRole === 'LEVEL_1' || currentUserRole === 'LEVEL_2') && profile?.region_id) {
             queryBuilder = queryBuilder.eq('region_id', profile.region_id);
@@ -221,31 +221,34 @@ export default function AllTransactionsPage() {
   };
   
 
- const handleExportToExcel = async () => {
+  const handleExportToExcel = async () => {
     setExporting(true);
     setResult(null);
     try {
-      // Önce o anki kullanıcıyı doğru şekilde alalım
+      // Önce o anki kullanıcıyı ve profilini doğru şekilde alalım
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       if (!currentUser) throw new Error("Kullanıcı bulunamadı.");
       
-      // Kullanıcının tam profilini state'den bulalım (region_id'yi de içerir)
-      const currentUserProfile = users.find(u => u.id === currentUser.id);
+      const { data: profile } = await supabase.from('profiles').select('role, region_id').eq('id', currentUser.id).single();
+      const currentUserRoleForExport = profile?.role || 'LEVEL_1';
+      const currentUserRegionIdForExport = profile?.region_id;
 
       // Filtreleme mantığını burada yeniden oluşturalım
-      const applyFilters = (queryBuilder: any) => {
-        if ((userRole === 'LEVEL_1' || userRole === 'LEVEL_2') && currentUserProfile?.region_id) {
-            queryBuilder = queryBuilder.eq('region_id', currentUserProfile.region_id);
+      const applyExportFilters = (queryBuilder: any) => {
+        // LEVEL_1 ve LEVEL_2 kullanıcıları sadece kendi bölgelerindeki verileri çeker
+        if ((currentUserRoleForExport === 'LEVEL_1' || currentUserRoleForExport === 'LEVEL_2') && currentUserRegionIdForExport) {
+            queryBuilder = queryBuilder.eq('region_id', currentUserRegionIdForExport);
         }
-        if (filterStartDate) queryBuilder = queryBuilder.gte('transaction_date', filterStartDate);
-        if (filterEndDate) queryBuilder = queryBuilder.lte('transaction_date', filterEndDate);
-        if (filterType) queryBuilder = queryBuilder.eq('type', filterType);
-        if (filterPaymentMethod) queryBuilder = queryBuilder.eq('payment_method', filterPaymentMethod);
-        if (filterInvoiceType) {
-            if (filterInvoiceType === 'YOK') queryBuilder = queryBuilder.is('fatura_tipi', null);
-            else queryBuilder = queryBuilder.eq('fatura_tipi', filterInvoiceType);
-        }
-        if (isAdmin) {
+        // Admin (LEVEL_3) kullanıcılar için mevcut filtreler uygulanır
+        if (currentUserRoleForExport === 'LEVEL_3') {
+            if (filterStartDate) queryBuilder = queryBuilder.gte('transaction_date', filterStartDate);
+            if (filterEndDate) queryBuilder = queryBuilder.lte('transaction_date', filterEndDate);
+            if (filterType) queryBuilder = queryBuilder.eq('type', filterType);
+            if (filterPaymentMethod) queryBuilder = queryBuilder.eq('payment_method', filterPaymentMethod);
+            if (filterInvoiceType) {
+                if (filterInvoiceType === 'YOK') queryBuilder = queryBuilder.is('fatura_tipi', null);
+                else queryBuilder = queryBuilder.eq('fatura_tipi', filterInvoiceType);
+            }
             if (filterRegion) queryBuilder = queryBuilder.eq('region_id', filterRegion);
             if (filterUser) queryBuilder = queryBuilder.eq('user_id', filterUser);
             if (filterExpenseRegion) queryBuilder = queryBuilder.eq('expense_region_info', filterExpenseRegion);
@@ -254,7 +257,7 @@ export default function AllTransactionsPage() {
       };
     
       let allDataQuery = supabase.from('transactions').select('*, regions(name)').order(sortBy, { ascending: sortOrder === 'asc' }).limit(10000);
-      allDataQuery = applyFilters(allDataQuery);
+      allDataQuery = applyExportFilters(allDataQuery); // Excel için özel filtreleri uygula
       const { data: allTransactions, error } = await allDataQuery;
 
       if (error || !allTransactions) {
