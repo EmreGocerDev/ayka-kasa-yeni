@@ -121,7 +121,7 @@ export default function ResetPasswordPage() {
                 </>
               )}
             </button>
-          </form>git 
+          </form>
         </div>
       </div>
     </main>
