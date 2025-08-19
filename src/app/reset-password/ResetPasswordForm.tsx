@@ -1,4 +1,4 @@
-// src/app/reset-password/ResetPasswordClient.tsx
+// src/app/reset-password/ResetPasswordForm.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { KeyRound, LogIn } from 'lucide-react';
 import Image from 'next/image';
 
-export default function ResetPasswordClient() {
+export default function ResetPasswordForm() {
   const supabase = createClient();
   const router = useRouter();
   const searchParams = useSearchParams();
