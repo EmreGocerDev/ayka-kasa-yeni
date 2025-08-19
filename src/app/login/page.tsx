@@ -1,6 +1,6 @@
 // src/app/login/page.tsx
 'use client';
-
+import Link from 'next/link';
 import { useState } from 'react';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -114,6 +114,14 @@ export default function CenteredCardLoginPage() {
                 )}
               </button>
             </div>
+            <div className="text-center mt-4">
+  <Link 
+    href="/forgot-password"
+    className="text-zinc-400 hover:text-cyan-400 transition-colors duration-200"
+  >
+    Şifrenizi mi unuttunuz?
+  </Link>
+</div>
           </form>
         </div>
       </div>
