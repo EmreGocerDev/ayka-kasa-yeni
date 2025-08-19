@@ -1,11 +1,8 @@
 // src/app/reset-password/page.tsx
 'use client';
 
-// Bu satır, sayfanın sadece istemci tarafında render edilmesini garanti eder.
-// export const dynamic = 'force-dynamic';
-// Normalde bu satır gereklidir, ancak 'use client' ile birlikte
-// Next.js bu sayfayı otomatik olarak dinamik olarak değerlendirir.
-// Sorun devam ederse, yorum satırını kaldırarak deneyebilirsiniz.
+// Force Next.js to render this page dynamically at request time
+export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
