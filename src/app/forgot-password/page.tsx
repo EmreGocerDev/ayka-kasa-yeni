@@ -20,20 +20,18 @@ export default function ForgotPasswordPage() {
     setMessage(null);
     setError(null);
 
-    // Supabase'in "resetPasswordForEmail" yerine "signInWithOtp" fonksiyonunu kullanıyoruz
-    // Bu fonksiyon, "type: 'recovery'" ile OTP gönderir.
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/reset-password`,
-        shouldCreateUser: false, // Mevcut kullanıcılar için
-      },
+    // Anlamsal olarak daha doğru olan fonksiyonu kullanıyoruz.
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        // Kullanıcı e-postadaki linke tıkladıktan SONRA nereye yönlendirilecek?
+        // Bu URL, /auth/callback rotası tarafından işlenecek ve kullanıcıyı
+        // şifresini gireceği son sayfaya götürecek.
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
     });
 
     if (error) {
-      setError('Şifre sıfırlama kodu gönderilemedi. Lütfen e-posta adresinizi kontrol edin.');
+        setError('Şifre sıfırlama isteği gönderilemedi. Lütfen e-posta adresinizi kontrol edin.');
     } else {
-      setMessage('E-posta adresinize bir doğrulama kodu gönderildi. Kodu kullanarak yeni şifrenizi belirleyebilirsiniz.');
+        setMessage('E-posta adresinize şifre sıfırlama bağlantısı gönderildi. Lütfen gelen kutunuzu kontrol edin.');
     }
     setLoading(false);
   };
@@ -89,7 +87,7 @@ export default function ForgotPasswordPage() {
               ) : (
                 <>
                   <Send size={20} />
-                  <span>Sıfırlama Kodu Gönder</span>
+                  <span>Sıfırlama Linki Gönder</span>
                 </>
               )}
             </button>
